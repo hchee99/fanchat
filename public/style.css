@@ -90,6 +90,23 @@ button.primary:hover { background: #4a3dc4; }
   font-size: 13px;
   color: #444;
 }
+#announce-box {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eee;
+  background: #fff6e6;
+}
+#announce-box input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #f0d9a8;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+#announce-box button { padding: 9px 16px; white-space: nowrap; }
+
 #add-box {
   display: flex;
   gap: 8px;

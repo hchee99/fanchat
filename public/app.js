@@ -61,8 +61,10 @@ $('logout-btn').addEventListener('click', logout);
 // ─────────── 앱 진입 (로그인 성공 후) ───────────
 function enterApp() {
   $('my-name').textContent = me.nickname + (me.isBroadcaster ? ' (방송인)' : '');
-  // 방송인에게만 초대 링크 복사 버튼을 보여줌
+  // 방송인: 초대 링크 + 공지 발송 / 팬: 방송인 추가 입력칸
   $('invite-box').hidden = !me.isBroadcaster;
+  $('announce-box').hidden = !me.isBroadcaster;
+  $('add-box').hidden = me.isBroadcaster;
   showScreen('list');
   connect();
 }
@@ -87,6 +89,19 @@ function addBroadcaster() {
 $('add-btn').addEventListener('click', addBroadcaster);
 $('add-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addBroadcaster();
+});
+
+// 방송인 공지 전체 발송
+function sendAnnounce() {
+  const text = $('announce-input').value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  if (!confirm('모든 팬에게 이 공지를 발송할까요?\n\n' + text)) return;
+  ws.send(JSON.stringify({ type: 'announce', text }));
+  $('announce-input').value = '';
+}
+$('announce-btn').addEventListener('click', sendAnnounce);
+$('announce-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendAnnounce();
 });
 
 // ─────────── 서버 연결 (WebSocket) ───────────
@@ -123,6 +138,8 @@ function connect() {
       if (data.roomId === currentRoomId) {
         document.querySelectorAll('.unread').forEach((el) => el.remove());
       }
+    } else if (data.type === 'announce_done') {
+      alert(`공지를 팬 ${data.count}명에게 발송했어요.`);
     } else if (data.type === 'error') {
       alert(data.text);
     }

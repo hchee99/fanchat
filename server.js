@@ -173,6 +173,33 @@ wss.on('connection', (ws) => {
       pushRoomList(peerId);
     }
 
+    // [공지 전체 발송] 방송인이 공지 1개를 쓰면 → 자기 팬들의 모든 방에 개별 발송
+    // 팬 입장에선 "방송인이 나에게 개인적으로 보낸 메시지"로 보여요 (버블과 같은 원리).
+    else if (data.type === 'announce') {
+      const sender = db.prepare('SELECT is_broadcaster FROM users WHERE id = ?').get(ws.userId);
+      if (!sender || !sender.is_broadcaster) return; // 방송인만 가능
+      const text = String(data.text || '').slice(0, 1000).trim();
+      if (!text) return;
+
+      const rooms = db.prepare('SELECT * FROM rooms WHERE broadcaster_id = ?').all(ws.userId);
+      const now = Date.now();
+      // 한 번에 여러 방에 넣을 땐 트랜잭션으로 묶으면 훨씬 빨라요 (팬이 많을수록 중요)
+      const insert = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)');
+      const affectedUsers = new Set();
+
+      for (const room of rooms) {
+        const r = insert.run(room.id, ws.userId, text, now);
+        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text, created_at: now, read: 0 } };
+        sendTo(room.fan_id, msg);   // 각 팬에게 전송
+        sendTo(ws.userId, msg);      // 방송인 자기 화면(해당 방 열려 있으면 바로 보이게)
+        affectedUsers.add(room.fan_id);
+      }
+      // 목록 화면(미리보기/시간)도 갱신
+      for (const fanId of affectedUsers) pushRoomList(fanId);
+      pushRoomList(ws.userId);
+      ws.send(JSON.stringify({ type: 'announce_done', count: rooms.length }));
+    }
+
     // [읽음 확인] 방을 보고 있는 상태에서 새 메시지가 도착했을 때
     else if (data.type === 'read') {
       const room = getRoomIfMember(data.roomId, ws.userId);
