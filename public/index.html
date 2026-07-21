@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fanchat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 화면 1: 로그인 / 회원가입 -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <h1>fanchat</h1>
+      <p class="auth-desc">방송인과 팬의 1:1 채팅</p>
+      <input id="auth-nickname" type="text" placeholder="닉네임" maxlength="20" />
+      <input id="auth-password" type="password" placeholder="비밀번호" maxlength="50" />
+      <label id="broadcaster-label"><input id="auth-broadcaster" type="checkbox" /> 방송인 계정으로 가입</label>
+      <button id="login-btn" class="primary">로그인</button>
+      <button id="signup-btn">회원가입</button>
+      <p id="auth-error" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- 화면 2: 채팅방 목록 (방송인에게는 팬 목록, 팬에게는 방송인 목록) -->
+  <div id="list-screen" hidden>
+    <header class="bar">
+      <span id="my-name"></span>
+      <span id="conn-status" class="status-on">● 연결됨</span>
+    </header>
+    <div id="invite-box" hidden>
+      <span>내 초대 링크:</span>
+      <button id="copy-invite-btn">링크 복사</button>
+    </div>
+    <main id="room-list"></main>
+    <p id="empty-hint" hidden>아직 채팅방이 없어요.<br />방송인의 초대 링크로 접속하면 채팅방이 생겨요.</p>
+    <footer class="bar">
+      <button id="logout-btn">로그아웃</button>
+    </footer>
+  </div>
+
+  <!-- 화면 3: 1:1 채팅방 -->
+  <div id="chat-screen" hidden>
+    <header class="bar">
+      <button id="back-btn">←</button>
+      <span id="peer-name"></span>
+      <span></span>
+    </header>
+    <main id="messages"></main>
+    <footer id="input-bar">
+      <input id="msg-input" type="text" placeholder="메시지 입력" maxlength="1000" autocomplete="off" />
+      <button id="send-btn" class="primary">전송</button>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

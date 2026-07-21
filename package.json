@@ -1,0 +1,16 @@
+{
+  "name": "fanchat",
+  "version": "0.1.0",
+  "description": "방송인-팬 1:1 채팅 플랫폼 프로토타입 (팬심M 개선 의뢰)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}
