@@ -74,6 +74,21 @@ $('copy-invite-btn').addEventListener('click', async () => {
   setTimeout(() => { $('copy-invite-btn').textContent = '링크 복사'; }, 1500);
 });
 
+// 방송인 이름 또는 초대 링크를 직접 입력해서 방 추가
+function addBroadcaster() {
+  let value = $('add-input').value.trim();
+  if (!value || !ws || ws.readyState !== 1) return;
+  // 링크를 통째로 붙여넣었으면 ?b=뒤의 방송인 이름만 뽑아냄
+  const match = value.match(/[?&]b=([^&]+)/);
+  if (match) value = decodeURIComponent(match[1]);
+  ws.send(JSON.stringify({ type: 'join_broadcaster', nickname: value }));
+  $('add-input').value = '';
+}
+$('add-btn').addEventListener('click', addBroadcaster);
+$('add-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addBroadcaster();
+});
+
 // ─────────── 서버 연결 (WebSocket) ───────────
 function connect() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -258,10 +273,19 @@ $('msg-input').addEventListener('keydown', (e) => {
 });
 
 // ─────────── 시작: 저장된 로그인이 있으면 바로 입장 ───────────
-const savedUser = localStorage.getItem('fanchat-user');
-if (token && savedUser) {
-  me = JSON.parse(savedUser);
-  enterApp();
-} else {
-  showScreen('auth');
+// 저장된 값이 손상돼 있어도 앱이 멈추지 않게 try로 감싸고, 실패하면 로그인 화면으로
+function startup() {
+  const savedUser = localStorage.getItem('fanchat-user');
+  if (!token || !savedUser) return showScreen('auth');
+  try {
+    me = JSON.parse(savedUser);
+    if (!me || !me.id) throw new Error('invalid user');
+    enterApp();
+  } catch {
+    localStorage.removeItem('fanchat-token');
+    localStorage.removeItem('fanchat-user');
+    token = null;
+    showScreen('auth');
+  }
 }
+startup();
