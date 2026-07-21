@@ -9,15 +9,43 @@
 <body>
   <!-- 화면 1: 로그인 / 회원가입 -->
   <div id="auth-screen">
-    <div class="auth-card">
+    <div class="auth-card" id="auth-main">
       <h1>fanchat</h1>
       <p class="auth-desc">방송인과 팬의 1:1 채팅</p>
       <input id="auth-nickname" type="text" placeholder="닉네임" maxlength="20" />
       <input id="auth-password" type="password" placeholder="비밀번호" maxlength="50" />
-      <label id="broadcaster-label"><input id="auth-broadcaster" type="checkbox" /> 방송인 계정으로 가입</label>
+      <div class="signup-only">
+        <select id="auth-security-q">
+          <option value="">보안 질문 선택 (비번 찾기용)</option>
+          <option>내가 가장 좋아하는 색깔은?</option>
+          <option>나의 첫 반려동물 이름은?</option>
+          <option>내가 태어난 도시는?</option>
+          <option>어릴 때 살던 동네 이름은?</option>
+          <option>내 인생 애니/게임 캐릭터는?</option>
+        </select>
+        <input id="auth-security-a" type="text" placeholder="보안 질문의 답" maxlength="50" />
+        <label id="broadcaster-label"><input id="auth-broadcaster" type="checkbox" /> 방송인 계정으로 가입</label>
+      </div>
       <button id="login-btn" class="primary">로그인</button>
       <button id="signup-btn">회원가입</button>
       <p id="auth-error" class="error-msg"></p>
+      <button id="forgot-link" class="link-btn">비밀번호를 잊으셨나요?</button>
+    </div>
+
+    <!-- 비밀번호 찾기 패널 -->
+    <div class="auth-card" id="auth-reset" hidden>
+      <h1>비밀번호 찾기</h1>
+      <p class="auth-desc">보안 질문에 답하면 새 비밀번호로 바꿀 수 있어요</p>
+      <input id="reset-nickname" type="text" placeholder="닉네임" maxlength="20" />
+      <button id="reset-find-btn" class="primary">보안 질문 확인</button>
+      <div id="reset-step2" hidden>
+        <p id="reset-question" class="reset-q"></p>
+        <input id="reset-answer" type="text" placeholder="보안 질문의 답" maxlength="50" />
+        <input id="reset-newpw" type="password" placeholder="새 비밀번호 (4글자 이상)" maxlength="50" />
+        <button id="reset-submit-btn" class="primary">비밀번호 재설정</button>
+      </div>
+      <p id="reset-error" class="error-msg"></p>
+      <button id="reset-back-btn" class="link-btn">← 로그인으로 돌아가기</button>
     </div>
   </div>
 

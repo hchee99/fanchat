@@ -28,19 +28,29 @@ function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
 
+// 보안 질문의 "답"도 비밀번호처럼 해시로 저장해요. 대소문자/앞뒤공백은 무시(normalize).
+function normalizeAnswer(a) {
+  return String(a || '').trim().toLowerCase();
+}
+
 // ─────────── 회원가입 / 로그인 (HTTP API) ───────────
 app.post('/api/signup', (req, res) => {
   const nickname = String(req.body.nickname || '').trim().slice(0, 20);
   const password = String(req.body.password || '');
   const isBroadcaster = req.body.isBroadcaster ? 1 : 0;
+  const securityQ = String(req.body.securityQuestion || '').trim().slice(0, 100);
+  const securityA = normalizeAnswer(req.body.securityAnswer);
 
   if (nickname.length < 2) return res.status(400).json({ error: '닉네임은 2글자 이상이어야 해요' });
   if (password.length < 4) return res.status(400).json({ error: '비밀번호는 4글자 이상이어야 해요' });
+  if (!securityQ) return res.status(400).json({ error: '보안 질문을 선택해주세요' });
+  if (securityA.length < 1) return res.status(400).json({ error: '보안 질문의 답을 입력해주세요' });
 
   const salt = crypto.randomBytes(16).toString('hex');
+  const saSalt = crypto.randomBytes(16).toString('hex');
   try {
-    db.prepare('INSERT INTO users (nickname, pw_hash, pw_salt, is_broadcaster, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(nickname, hashPassword(password, salt), salt, isBroadcaster, Date.now());
+    db.prepare('INSERT INTO users (nickname, pw_hash, pw_salt, is_broadcaster, created_at, security_q, sa_hash, sa_salt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(nickname, hashPassword(password, salt), salt, isBroadcaster, Date.now(), securityQ, hashPassword(securityA, saSalt), saSalt);
   } catch {
     return res.status(409).json({ error: '이미 사용 중인 닉네임이에요' });
   }
@@ -49,6 +59,31 @@ app.post('/api/signup', (req, res) => {
 
 app.post('/api/login', (req, res) => {
   return login(res, String(req.body.nickname || '').trim(), String(req.body.password || ''));
+});
+
+// [비번찾기 1단계] 닉네임을 주면 그 사람의 보안 질문을 알려줌
+app.post('/api/forgot/question', (req, res) => {
+  const user = db.prepare('SELECT security_q FROM users WHERE nickname = ?').get(String(req.body.nickname || '').trim());
+  if (!user) return res.status(404).json({ error: '그런 닉네임이 없어요' });
+  if (!user.security_q) return res.status(400).json({ error: '이 계정은 보안 질문이 없어 재설정할 수 없어요. 새로 가입해주세요' });
+  res.json({ question: user.security_q });
+});
+
+// [비번찾기 2단계] 답이 맞으면 새 비밀번호로 교체
+app.post('/api/forgot/reset', (req, res) => {
+  const nickname = String(req.body.nickname || '').trim();
+  const answer = normalizeAnswer(req.body.securityAnswer);
+  const newPassword = String(req.body.newPassword || '');
+  if (newPassword.length < 4) return res.status(400).json({ error: '새 비밀번호는 4글자 이상이어야 해요' });
+
+  const user = db.prepare('SELECT * FROM users WHERE nickname = ?').get(nickname);
+  if (!user || !user.sa_hash) return res.status(404).json({ error: '재설정할 수 없는 계정이에요' });
+  if (hashPassword(answer, user.sa_salt) !== user.sa_hash) {
+    return res.status(401).json({ error: '보안 질문의 답이 맞지 않아요' });
+  }
+  const salt = crypto.randomBytes(16).toString('hex');
+  db.prepare('UPDATE users SET pw_hash = ?, pw_salt = ? WHERE id = ?').run(hashPassword(newPassword, salt), salt, user.id);
+  return login(res, nickname, newPassword); // 재설정 후 바로 로그인
 });
 
 function login(res, nickname, password) {

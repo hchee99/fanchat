@@ -36,6 +36,33 @@ body {
   border-radius: 8px;
   font-size: 15px;
 }
+.signup-only { display: flex; flex-direction: column; gap: 10px; }
+.auth-card select {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  background: #fff;
+}
+.reset-q {
+  font-size: 15px;
+  font-weight: bold;
+  color: #5b4ddb;
+  background: #eef0fb;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 4px 0;
+}
+#reset-step2 { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.link-btn {
+  border: none;
+  background: none;
+  color: #888;
+  font-size: 13px;
+  text-decoration: underline;
+  padding: 4px;
+}
+.link-btn:hover { color: #5b4ddb; background: none; }
 #broadcaster-label { font-size: 13px; color: #444; text-align: left; }
 button {
   padding: 11px;

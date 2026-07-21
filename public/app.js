@@ -32,6 +32,8 @@ async function authRequest(path) {
       nickname: $('auth-nickname').value.trim(),
       password: $('auth-password').value,
       isBroadcaster: $('auth-broadcaster').checked,
+      securityQuestion: $('auth-security-q').value,
+      securityAnswer: $('auth-security-a').value,
     }),
   });
   const data = await res.json();
@@ -39,6 +41,9 @@ async function authRequest(path) {
     $('auth-error').textContent = data.error || '오류가 발생했어요';
     return;
   }
+  saveLoginAndEnter(data);
+}
+function saveLoginAndEnter(data) {
   token = data.token;
   me = data.user;
   localStorage.setItem('fanchat-token', token);
@@ -49,6 +54,46 @@ $('login-btn').addEventListener('click', () => authRequest('/api/login'));
 $('signup-btn').addEventListener('click', () => authRequest('/api/signup'));
 $('auth-password').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') authRequest('/api/login');
+});
+
+// ─────────── 비밀번호 찾기 (보안 질문 방식) ───────────
+$('forgot-link').addEventListener('click', () => {
+  $('auth-main').hidden = true;
+  $('auth-reset').hidden = false;
+});
+$('reset-back-btn').addEventListener('click', () => {
+  $('auth-reset').hidden = true;
+  $('auth-main').hidden = false;
+});
+
+// 1단계: 닉네임으로 보안 질문 가져오기
+$('reset-find-btn').addEventListener('click', async () => {
+  $('reset-error').textContent = '';
+  const res = await fetch('/api/forgot/question', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nickname: $('reset-nickname').value.trim() }),
+  });
+  const data = await res.json();
+  if (!res.ok) { $('reset-error').textContent = data.error; return; }
+  $('reset-question').textContent = data.question;
+  $('reset-step2').hidden = false;
+});
+
+// 2단계: 답 + 새 비밀번호로 재설정 → 성공 시 바로 로그인
+$('reset-submit-btn').addEventListener('click', async () => {
+  $('reset-error').textContent = '';
+  const res = await fetch('/api/forgot/reset', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      nickname: $('reset-nickname').value.trim(),
+      securityAnswer: $('reset-answer').value,
+      newPassword: $('reset-newpw').value,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) { $('reset-error').textContent = data.error; return; }
+  alert('비밀번호를 새로 설정했어요. 자동으로 로그인할게요.');
+  saveLoginAndEnter(data);
 });
 
 function logout() {

@@ -17,7 +17,10 @@ db.exec(`
     pw_hash TEXT NOT NULL,
     pw_salt TEXT NOT NULL,
     is_broadcaster INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    security_q TEXT,
+    sa_hash TEXT,
+    sa_salt TEXT
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -45,5 +48,11 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_messages_room ON messages (room_id, id);
 `);
+
+// 마이그레이션: 예전에 만들어진 DB에는 보안 질문 칸이 없으므로 있으면 추가
+// (이미 있으면 SQLite가 에러를 내는데, 그건 무시해도 안전해요)
+for (const col of ['security_q TEXT', 'sa_hash TEXT', 'sa_salt TEXT']) {
+  try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* 이미 있음 */ }
+}
 
 module.exports = db;
