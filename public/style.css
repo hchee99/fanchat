@@ -120,22 +120,41 @@ button.primary:hover { background: #4a3dc4; }
   font-size: 13px;
   color: #444;
 }
-#announce-box {
-  display: flex;
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #eee;
-  background: #fff6e6;
-}
-#announce-box input {
+/* 방송인 탭 */
+#tab-bar { display: flex; border-bottom: 1px solid #eee; background: #fff; }
+.tab {
   flex: 1;
-  padding: 9px 12px;
-  border: 1px solid #f0d9a8;
-  border-radius: 8px;
+  padding: 12px;
+  border: none;
+  border-radius: 0;
+  background: none;
   font-size: 14px;
-  outline: none;
+  color: #999;
+  border-bottom: 2px solid transparent;
 }
-#announce-box button { padding: 9px 16px; white-space: nowrap; }
+.tab.active { color: #5b4ddb; font-weight: bold; border-bottom-color: #5b4ddb; }
+
+/* 통합 피드 */
+#feed-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f2f3f7;
+}
+.feed-mine { align-self: flex-end; max-width: 80%; text-align: right; }
+.feed-mine .bubble { display: inline-block; text-align: left; }
+.feed-tag { font-size: 10px; color: #999; margin-top: 2px; }
+.feed-fan { display: flex; gap: 8px; align-items: flex-start; max-width: 85%; cursor: pointer; }
+.feed-fan .avatar { width: 32px; height: 32px; font-size: 12px; }
+.feed-fan-name { font-size: 11px; color: #667; margin-bottom: 2px; }
+.feed-fan .bubble { background: #fff; border-top-left-radius: 3px; }
+.feed-fan:hover .bubble { background: #f0eefc; }
+#feed-bar { display: flex; background: #fff; padding: 8px; gap: 8px; }
+#feed-input { flex: 1; border: none; outline: none; font-size: 15px; padding: 8px; }
+#feed-send-btn { padding: 8px 14px; white-space: nowrap; }
 
 #add-box {
   display: flex;

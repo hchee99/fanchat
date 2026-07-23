@@ -146,6 +146,9 @@ wss.on('connection', (ws) => {
       const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(String(data.token || ''));
       if (!session) return ws.send(JSON.stringify({ type: 'auth_fail' }));
       ws.userId = session.user_id;
+      const u = db.prepare('SELECT nickname, is_broadcaster FROM users WHERE id = ?').get(ws.userId);
+      ws.nickname = u ? u.nickname : '';
+      ws.isBroadcaster = u ? !!u.is_broadcaster : false;
       if (!online.has(ws.userId)) online.set(ws.userId, new Set());
       online.get(ws.userId).add(ws);
       ws.send(JSON.stringify({ type: 'auth_ok' }));
@@ -200,7 +203,7 @@ wss.on('connection', (ws) => {
       const r = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)')
         .run(room.id, ws.userId, text, now, 'text');
 
-      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text, created_at: now, read: 0, kind: 'text' } };
+      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text, created_at: now, read: 0, kind: 'text' } };
       const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
       sendTo(ws.userId, msg);
       sendTo(peerId, msg);
@@ -223,7 +226,7 @@ wss.on('connection', (ws) => {
       const r = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)')
         .run(room.id, ws.userId, dataUrl, now, 'image');
 
-      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text: dataUrl, created_at: now, read: 0, kind: 'image' } };
+      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text: dataUrl, created_at: now, read: 0, kind: 'image' } };
       const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
       sendTo(ws.userId, msg);
       sendTo(peerId, msg);
@@ -241,21 +244,38 @@ wss.on('connection', (ws) => {
 
       const rooms = db.prepare('SELECT * FROM rooms WHERE broadcaster_id = ?').all(ws.userId);
       const now = Date.now();
-      // 한 번에 여러 방에 넣을 땐 트랜잭션으로 묶으면 훨씬 빨라요 (팬이 많을수록 중요)
-      const insert = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)');
+      // kind='announce'로 저장해서, 피드에서 "전체 발송"임을 알아보고 중복 없이 한 번만 보여줄 수 있게
+      const insert = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)');
       const affectedUsers = new Set();
 
       for (const room of rooms) {
-        const r = insert.run(room.id, ws.userId, text, now);
-        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text, created_at: now, read: 0 } };
+        const r = insert.run(room.id, ws.userId, text, now, 'announce');
+        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text, created_at: now, read: 0, kind: 'announce' } };
         sendTo(room.fan_id, msg);   // 각 팬에게 전송
-        sendTo(ws.userId, msg);      // 방송인 자기 화면(해당 방 열려 있으면 바로 보이게)
         affectedUsers.add(room.fan_id);
       }
       // 목록 화면(미리보기/시간)도 갱신
       for (const fanId of affectedUsers) pushRoomList(fanId);
       pushRoomList(ws.userId);
       ws.send(JSON.stringify({ type: 'announce_done', count: rooms.length }));
+    }
+
+    // [통합 피드] 방송인 전용: 모든 팬 방의 메시지를 시간순으로 한 줄로 모아서 보내줌
+    // 전체 발송(announce)은 방마다 복사돼 저장되므로, 같은 내용+시각은 하나로 합쳐요(중복 제거).
+    else if (data.type === 'open_feed') {
+      if (!ws.isBroadcaster) return;
+      const items = db.prepare(`
+        SELECT m.id, m.room_id, m.sender_id, m.text, m.created_at, m.kind, u.nickname AS sender_name
+        FROM messages m
+        JOIN rooms r ON r.id = m.room_id
+        JOIN users u ON u.id = m.sender_id
+        WHERE r.broadcaster_id = ?
+        GROUP BY CASE WHEN m.kind = 'announce' THEN 'a' || m.text || m.created_at ELSE 'm' || m.id END
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT 100
+      `).all(ws.userId);
+      items.reverse(); // 화면에는 오래된 것부터 아래로
+      ws.send(JSON.stringify({ type: 'feed', items }));
     }
 
     // [읽음 확인] 방을 보고 있는 상태에서 새 메시지가 도착했을 때

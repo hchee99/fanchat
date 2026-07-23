@@ -106,13 +106,32 @@ $('logout-btn').addEventListener('click', logout);
 // ─────────── 앱 진입 (로그인 성공 후) ───────────
 function enterApp() {
   $('my-name').textContent = me.nickname + (me.isBroadcaster ? ' (방송인)' : '');
-  // 방송인: 초대 링크 + 공지 발송 / 팬: 방송인 추가 입력칸
-  $('invite-box').hidden = !me.isBroadcaster;
-  $('announce-box').hidden = !me.isBroadcaster;
+  // 방송인: 탭(전체 피드 기본) / 팬: 방송인 추가 입력칸 + 방 목록만
+  $('tab-bar').hidden = !me.isBroadcaster;
   $('add-box').hidden = me.isBroadcaster;
   showScreen('list');
+  showTab(me.isBroadcaster ? 'feed' : 'rooms');
   connect();
 }
+
+// ─────────── 탭 전환 (방송인 전용) ───────────
+let activeTab = 'rooms';
+function showTab(name) {
+  activeTab = name;
+  const feed = name === 'feed';
+  $('tab-feed').classList.toggle('active', feed);
+  $('tab-rooms').classList.toggle('active', !feed);
+  $('feed-view').hidden = !feed;
+  $('feed-bar').hidden = !feed || !me.isBroadcaster;
+  $('room-list').hidden = feed;
+  $('invite-box').hidden = feed || !me.isBroadcaster; // 초대 링크는 목록 탭에서
+  if (feed) $('empty-hint').hidden = true;
+  if (feed && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'open_feed' })); // 피드 열 때마다 최신으로 새로 받아옴
+  }
+}
+$('tab-feed').addEventListener('click', () => showTab('feed'));
+$('tab-rooms').addEventListener('click', () => showTab('rooms'));
 
 $('copy-invite-btn').addEventListener('click', async () => {
   const link = `${location.origin}/?b=${encodeURIComponent(me.nickname)}`;
@@ -136,17 +155,17 @@ $('add-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addBroadcaster();
 });
 
-// 방송인 공지 전체 발송
-function sendAnnounce() {
-  const text = $('announce-input').value.trim();
+// 피드 입력창 = 전체 발송 (방송인의 기본 쓰기 방식)
+function sendFeedAnnounce() {
+  const text = $('feed-input').value.trim();
   if (!text || !ws || ws.readyState !== 1) return;
-  if (!confirm('모든 팬에게 이 공지를 발송할까요?\n\n' + text)) return;
   ws.send(JSON.stringify({ type: 'announce', text }));
-  $('announce-input').value = '';
+  $('feed-input').value = '';
+  $('feed-input').focus();
 }
-$('announce-btn').addEventListener('click', sendAnnounce);
-$('announce-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendAnnounce();
+$('feed-send-btn').addEventListener('click', sendFeedAnnounce);
+$('feed-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendFeedAnnounce();
 });
 
 // ─────────── 서버 연결 (WebSocket) ───────────
@@ -170,8 +189,14 @@ function connect() {
         ws.send(JSON.stringify({ type: 'join_broadcaster', nickname: pendingJoin }));
         pendingJoin = null;
       }
+      // 방송인이 피드 탭이면 피드 받아오기 (연결 직후와 재연결 때 모두)
+      if (me.isBroadcaster && activeTab === 'feed') {
+        ws.send(JSON.stringify({ type: 'open_feed' }));
+      }
     } else if (data.type === 'rooms') {
       renderRoomList(data.rooms);
+    } else if (data.type === 'feed') {
+      renderFeed(data.items);
     } else if (data.type === 'joined') {
       openRoom(data.roomId);
     } else if (data.type === 'history') {
@@ -184,7 +209,8 @@ function connect() {
         document.querySelectorAll('.unread').forEach((el) => el.remove());
       }
     } else if (data.type === 'announce_done') {
-      alert(`공지를 팬 ${data.count}명에게 발송했어요.`);
+      // 발송 완료 → 피드를 새로 받아서 내 말풍선이 (한 번만) 나타나게
+      if (activeTab === 'feed') ws.send(JSON.stringify({ type: 'open_feed' }));
     } else if (data.type === 'error') {
       alert(data.text);
     }
@@ -215,7 +241,7 @@ function formatTime(ms) {
 function renderRoomList(rooms) {
   const list = $('room-list');
   list.innerHTML = '';
-  $('empty-hint').hidden = rooms.length > 0;
+  $('empty-hint').hidden = activeTab === 'feed' || rooms.length > 0;
 
   for (const room of rooms) {
     const item = document.createElement('div');
@@ -257,6 +283,76 @@ function renderRoomList(rooms) {
   }
 }
 
+// ─────────── 통합 피드 (방송인 전용) ───────────
+function renderFeed(items) {
+  const view = $('feed-view');
+  view.innerHTML = '';
+  if (items.length === 0) {
+    const hint = document.createElement('p');
+    hint.style.cssText = 'margin:auto;text-align:center;color:#999;font-size:14px;line-height:1.7;';
+    hint.textContent = '아직 메시지가 없어요. 아래에 쓰면 팬 전원에게 발송돼요.';
+    view.appendChild(hint);
+    return;
+  }
+  for (const m of items) appendFeedItem(m, false);
+  view.scrollTop = view.scrollHeight;
+}
+
+function appendFeedItem(m, scroll = true) {
+  const view = $('feed-view');
+  const mine = m.sender_id === me.id;
+
+  if (mine) {
+    // 내(방송인) 메시지: 오른쪽 보라 말풍선 + "전체 발송" 꼬리표
+    const wrap = document.createElement('div');
+    wrap.className = 'feed-mine';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.style.background = '#5b4ddb';
+    bubble.style.color = '#fff';
+    bubble.textContent = m.text;
+    const tag = document.createElement('div');
+    tag.className = 'feed-tag';
+    tag.textContent = (m.kind === 'announce' ? '📢 전체 발송' : '개별 답장') + ' · ' + formatTime(m.created_at);
+    wrap.appendChild(bubble);
+    wrap.appendChild(tag);
+    view.appendChild(wrap);
+  } else {
+    // 팬 메시지: 이름표 + 말풍선. 누르면 그 팬과의 1:1 채팅방으로 이동!
+    const row = document.createElement('div');
+    row.className = 'feed-fan';
+    row.title = m.sender_name + '님과의 1:1 채팅방 열기';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = (m.sender_name || '?').slice(0, 2);
+
+    const body = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'feed-fan-name';
+    name.textContent = m.sender_name + ' · ' + formatTime(m.created_at);
+    const bubble = document.createElement('div');
+    if (m.kind === 'image') {
+      bubble.className = 'bubble image-bubble';
+      const img = document.createElement('img');
+      img.src = m.text;
+      img.alt = '사진';
+      bubble.appendChild(img);
+    } else {
+      bubble.className = 'bubble';
+      bubble.textContent = m.text;
+    }
+    body.appendChild(name);
+    body.appendChild(bubble);
+
+    row.appendChild(avatar);
+    row.appendChild(body);
+    row.addEventListener('click', () => openRoom(m.room_id)); // 핵심: 피드 → 1:1 방
+    view.appendChild(row);
+  }
+  if (scroll) view.scrollTop = view.scrollHeight;
+}
+
 // ─────────── 1:1 채팅 화면 ───────────
 function openRoom(roomId) {
   currentRoomId = roomId;
@@ -266,6 +362,10 @@ function openRoom(roomId) {
 $('back-btn').addEventListener('click', () => {
   currentRoomId = null;
   showScreen('list');
+  // 방송인이 피드 탭이었다면 방에 다녀온 사이의 변화를 반영해 새로 받아옴
+  if (me.isBroadcaster && activeTab === 'feed' && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'open_feed' }));
+  }
 });
 
 function renderHistory(data) {
@@ -337,6 +437,11 @@ function openLightbox(src) {
 }
 
 function onChat(data) {
+  // 방송인이 피드를 보고 있으면: 팬의 새 메시지를 피드에 실시간으로 추가
+  if (me.isBroadcaster && activeTab === 'feed' && !$('feed-view').hidden
+      && currentRoomId === null && data.message.sender_id !== me.id) {
+    appendFeedItem({ ...data.message, room_id: data.roomId });
+  }
   if (data.roomId !== currentRoomId) return; // 다른 방 메시지면 목록 배지가 알아서 갱신됨
   renderMessage(data.message);
   scrollToBottom();
