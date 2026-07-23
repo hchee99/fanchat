@@ -363,7 +363,12 @@ function appendFeedItem(m, scroll = true) {
       bubble.className = 'bubble image-bubble';
       const img = document.createElement('img');
       img.src = m.text;
-      img.alt = '사진';
+      img.alt = '사진 (누르면 크게 보기)';
+      // 사진 클릭 = 크게 보기. stopPropagation으로 "1:1 방 이동" 클릭이 같이 실행되는 걸 막음
+      img.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openLightbox(m.text);
+      });
       bubble.appendChild(img);
     } else {
       bubble.className = 'bubble';
