@@ -29,6 +29,7 @@ let ws = null;
 let me = null;                 // { id, nickname, isBroadcaster }
 let token = localStorage.getItem('fanchat-token');
 let currentRoomId = null;      // 지금 열어둔 방 (목록 화면이면 null)
+let currentPeer = null;        // 지금 방의 상대 { name, avatar } — 말풍선 옆 프사에 사용
 let pendingJoin = null;        // 초대 링크(?b=방송인)로 들어온 경우 기억해둠
 
 // ── 초대 링크 확인: ?b=방송인닉네임 ──
@@ -490,7 +491,9 @@ $('back-btn').addEventListener('click', () => {
 });
 
 function renderHistory(data) {
+  currentPeer = { name: data.peer, avatar: data.peerAvatar || null };
   $('peer-name').textContent = data.peer;
+  applyAvatar($('peer-avatar'), currentPeer.avatar, data.peer); // 헤더에 상대 프사
   $('messages').innerHTML = '';
   for (const m of data.messages) renderMessage(m);
   showScreen('chat');
@@ -534,6 +537,13 @@ function renderMessage(m) {
   time.textContent = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
   meta.appendChild(time);
 
+  // 상대(theirs) 말풍선 왼쪽에 상대 프사 (카톡 스타일)
+  if (!mine && currentPeer) {
+    const av = document.createElement('div');
+    av.className = 'avatar msg-avatar';
+    applyAvatar(av, currentPeer.avatar, currentPeer.name);
+    line.appendChild(av);
+  }
   line.appendChild(bubble);
   line.appendChild(meta);
   row.appendChild(line);

@@ -218,6 +218,13 @@ button.primary:hover { background: #4a3dc4; }
 /* 프사가 있으면 배경 이미지로 표시하고 글자는 숨김 */
 .avatar.has-photo { color: transparent; }
 .avatar-lg { width: 100px; height: 100px; font-size: 32px; }
+.avatar-sm { width: 30px; height: 30px; font-size: 12px; }
+
+/* 채팅방 헤더의 상대 프사+이름 */
+.peer-head { display: flex; align-items: center; gap: 8px; }
+/* 상대 말풍선 옆 프사 (카톡처럼 왼쪽에) */
+.msg-avatar { width: 32px; height: 32px; font-size: 12px; align-self: flex-start; margin-top: 2px; }
+.theirs .bubble-line { align-items: flex-start; }
 .room-mid { flex: 1; min-width: 0; }
 .room-peer { font-size: 15px; font-weight: bold; }
 .room-last {
