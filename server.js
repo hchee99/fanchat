@@ -291,10 +291,11 @@ wss.on('connection', (ws) => {
           JOIN rooms r ON r.id = m.room_id
           JOIN users u ON u.id = m.sender_id
           WHERE r.broadcaster_id = ?
+            AND (m.sender_id != ? OR m.kind IN ('announce', 'announce_image'))
           GROUP BY CASE WHEN m.kind IN ('announce', 'announce_image') THEN 'a' || m.created_at ELSE 'm' || m.id END
           ORDER BY m.created_at DESC, m.id DESC
           LIMIT 100
-        `, [ws.userId]);
+        `, [ws.userId, ws.userId]);
         items.reverse(); // 화면에는 오래된 것부터 아래로
         ws.send(JSON.stringify({ type: 'feed', items }));
       }
