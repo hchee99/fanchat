@@ -270,6 +270,8 @@ function connect() {
       if (data.roomId === currentRoomId) {
         document.querySelectorAll('.unread').forEach((el) => el.remove());
       }
+    } else if (data.type === 'room_photos') {
+      if (data.roomId === currentRoomId) renderPhotos(data.photos);
     } else if (data.type === 'avatar_set') {
       // 내 프사가 바뀜 → 저장해두고 설정 화면 즉시 반영
       me.avatar = data.avatar;
@@ -441,8 +443,32 @@ function openRoom(roomId) {
   ws.send(JSON.stringify({ type: 'open_room', roomId }));
 }
 
+// ─────────── 사진 모아보기 ───────────
+$('room-menu-btn').addEventListener('click', () => {
+  if (!currentRoomId || !ws || ws.readyState !== 1) return;
+  $('photos-grid').innerHTML = '';
+  $('photos-empty').hidden = true;
+  $('photos-view').hidden = false;
+  ws.send(JSON.stringify({ type: 'room_photos', roomId: currentRoomId }));
+});
+$('photos-close-btn').addEventListener('click', () => { $('photos-view').hidden = true; });
+
+function renderPhotos(photos) {
+  const grid = $('photos-grid');
+  grid.innerHTML = '';
+  $('photos-empty').hidden = photos.length > 0;
+  for (const p of photos) {
+    const img = document.createElement('img');
+    img.src = p.text;
+    img.alt = '사진';
+    img.addEventListener('click', () => openLightbox(p.text));
+    grid.appendChild(img);
+  }
+}
+
 $('back-btn').addEventListener('click', () => {
   currentRoomId = null;
+  $('photos-view').hidden = true; // 방 나갈 때 모아보기도 닫기
   showScreen('list');
   // 방송인이 피드 탭이었다면 방에 다녀온 사이의 변화를 반영해 새로 받아옴
   if (me.isBroadcaster && activeTab === 'feed' && ws && ws.readyState === 1) {

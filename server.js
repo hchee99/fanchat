@@ -224,6 +224,17 @@ wss.on('connection', (ws) => {
         await pushRoomList(ws.userId);
       }
 
+      // [사진 모아보기] 이 방에서 오간 사진(일반/전체발송)만 최신순으로 모아줌
+      else if (data.type === 'room_photos') {
+        const room = await getRoomIfMember(data.roomId, ws.userId);
+        if (!room) return;
+        const photos = await db.all(
+          `SELECT id, text FROM messages WHERE room_id = ? AND kind IN ('image', 'announce_image') ORDER BY id DESC`,
+          [room.id]
+        );
+        ws.send(JSON.stringify({ type: 'room_photos', roomId: room.id, photos }));
+      }
+
       // [채팅] 저장하고 → 나와 상대 모두에게 전달 (미니 카카오톡과 같은 심장부)
       else if (data.type === 'chat') {
         const room = await getRoomIfMember(data.roomId, ws.userId);
