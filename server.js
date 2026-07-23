@@ -105,7 +105,7 @@ async function login(res, nickname, password) {
   // 토큰 = 로그인 성공 증표. 이후 요청마다 이걸로 본인 확인 (매번 비밀번호를 보내지 않게)
   const token = crypto.randomBytes(32).toString('hex');
   await db.run('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)', [token, user.id, Date.now()]);
-  res.json({ token, user: { id: user.id, nickname: user.nickname, isBroadcaster: !!user.is_broadcaster } });
+  res.json({ token, user: { id: user.id, nickname: user.nickname, isBroadcaster: !!user.is_broadcaster, avatar: user.avatar || null } });
 }
 
 // ─────────── 자주 쓰는 조회들 ───────────
@@ -116,6 +116,7 @@ function getRoomList(userId) {
     SELECT r.id,
       u.nickname AS peer,
       u.is_broadcaster AS peerIsBroadcaster,
+      u.avatar AS peerAvatar,
       (SELECT CASE WHEN m.kind IN ('image', 'announce_image') THEN '[사진]' ELSE m.text END FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastText,
       (SELECT created_at FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastTime,
       (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.sender_id != ? AND m.read = 0) AS unread
@@ -158,9 +159,10 @@ wss.on('connection', (ws) => {
         const session = await db.get('SELECT * FROM sessions WHERE token = ?', [String(data.token || '')]);
         if (!session) return ws.send(JSON.stringify({ type: 'auth_fail' }));
         ws.userId = session.user_id;
-        const u = await db.get('SELECT nickname, is_broadcaster FROM users WHERE id = ?', [ws.userId]);
+        const u = await db.get('SELECT nickname, is_broadcaster, avatar FROM users WHERE id = ?', [ws.userId]);
         ws.nickname = u ? u.nickname : '';
         ws.isBroadcaster = u ? !!u.is_broadcaster : false;
+        ws.avatar = u ? (u.avatar || null) : null;
         if (!online.has(ws.userId)) online.set(ws.userId, new Set());
         online.get(ws.userId).add(ws);
         ws.send(JSON.stringify({ type: 'auth_ok' }));
@@ -169,6 +171,27 @@ wss.on('connection', (ws) => {
       }
 
       if (!ws.userId) return; // 인증 전에는 아무것도 못 함
+
+      // [프로필 사진 설정] 압축된 사진(dataURL)을 내 프사로 저장
+      if (data.type === 'set_avatar') {
+        const dataUrl = String(data.dataUrl || '');
+        if (!/^data:image\/(jpeg|png|webp|gif);base64,/.test(dataUrl)) return;
+        if (dataUrl.length > 500_000) { // 프사는 작아도 되니 상한을 낮게
+          return ws.send(JSON.stringify({ type: 'error', text: '프로필 사진이 너무 커요.' }));
+        }
+        await db.run('UPDATE users SET avatar = ? WHERE id = ?', [dataUrl, ws.userId]);
+        ws.avatar = dataUrl;
+        ws.send(JSON.stringify({ type: 'avatar_set', avatar: dataUrl }));
+        return;
+      }
+
+      // [프로필 사진 제거] 기본(글자 동그라미)으로 되돌리기
+      if (data.type === 'remove_avatar') {
+        await db.run('UPDATE users SET avatar = NULL WHERE id = ?', [ws.userId]);
+        ws.avatar = null;
+        ws.send(JSON.stringify({ type: 'avatar_set', avatar: null }));
+        return;
+      }
 
       // [방송인 방 만들기] 팬이 초대 링크로 들어옴 → 그 방송인과의 방을 찾거나 새로 만듦
       if (data.type === 'join_broadcaster') {
@@ -191,13 +214,13 @@ wss.on('connection', (ws) => {
         const room = await getRoomIfMember(data.roomId, ws.userId);
         if (!room) return;
         const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
-        const peer = await db.get('SELECT nickname FROM users WHERE id = ?', [peerId]);
+        const peer = await db.get('SELECT nickname, avatar FROM users WHERE id = ?', [peerId]);
 
         await db.run('UPDATE messages SET read = 1 WHERE room_id = ? AND sender_id != ?', [room.id, ws.userId]);
         sendTo(peerId, { type: 'read', roomId: room.id }); // 상대 화면의 숫자 1 지우기
 
         const messages = await db.all('SELECT id, sender_id, text, created_at, read, kind FROM messages WHERE room_id = ? ORDER BY id', [room.id]);
-        ws.send(JSON.stringify({ type: 'history', roomId: room.id, peer: peer.nickname, messages }));
+        ws.send(JSON.stringify({ type: 'history', roomId: room.id, peer: peer.nickname, peerAvatar: peer.avatar || null, messages }));
         await pushRoomList(ws.userId);
       }
 
@@ -211,7 +234,7 @@ wss.on('connection', (ws) => {
         const now = Date.now();
         const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, text, now, 'text']);
 
-        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text, created_at: now, read: 0, kind: 'text' } };
+        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, sender_avatar: ws.avatar, text, created_at: now, read: 0, kind: 'text' } };
         const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
         sendTo(ws.userId, msg);
         sendTo(peerId, msg);
@@ -233,7 +256,7 @@ wss.on('connection', (ws) => {
         const now = Date.now();
         const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, dataUrl, now, 'image']);
 
-        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text: dataUrl, created_at: now, read: 0, kind: 'image' } };
+        const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, sender_avatar: ws.avatar, text: dataUrl, created_at: now, read: 0, kind: 'image' } };
         const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
         sendTo(ws.userId, msg);
         sendTo(peerId, msg);
@@ -255,7 +278,7 @@ wss.on('connection', (ws) => {
         // kind='announce'로 저장해서, 피드에서 "전체 발송"임을 알아보고 중복 없이 한 번만 보여줄 수 있게
         for (const room of rooms) {
           const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, text, now, 'announce']);
-          const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text, created_at: now, read: 0, kind: 'announce' } };
+          const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, sender_avatar: ws.avatar, text, created_at: now, read: 0, kind: 'announce' } };
           sendTo(room.fan_id, msg); // 각 팬에게 전송
           affectedUsers.add(room.fan_id);
         }
@@ -280,7 +303,7 @@ wss.on('connection', (ws) => {
 
         for (const room of rooms) {
           const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, dataUrl, now, 'announce_image']);
-          const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text: dataUrl, created_at: now, read: 0, kind: 'announce_image' } };
+          const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, sender_avatar: ws.avatar, text: dataUrl, created_at: now, read: 0, kind: 'announce_image' } };
           sendTo(room.fan_id, msg);
           affectedUsers.add(room.fan_id);
         }
@@ -313,7 +336,7 @@ wss.on('connection', (ws) => {
         }
 
         const items = await db.all(`
-          SELECT m.id, m.room_id, m.sender_id, m.text, m.created_at, m.kind, u.nickname AS sender_name
+          SELECT m.id, m.room_id, m.sender_id, m.text, m.created_at, m.kind, u.nickname AS sender_name, u.avatar AS sender_avatar
           FROM messages m
           JOIN rooms r ON r.id = m.room_id
           JOIN users u ON u.id = m.sender_id

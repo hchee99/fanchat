@@ -52,8 +52,11 @@
   <!-- 화면 2: 채팅방 목록 (방송인에게는 팬 목록, 팬에게는 방송인 목록) -->
   <div id="list-screen" hidden>
     <header class="bar">
-      <span id="my-name"></span>
-      <span id="conn-status" class="status-on">● 연결됨</span>
+      <span id="my-name" title="프로필 편집"></span>
+      <span>
+        <span id="conn-status" class="status-on">● 연결됨</span>
+        <button id="settings-btn" aria-label="프로필 설정">⚙</button>
+      </span>
     </header>
     <!-- 방송인 전용 탭: 전체 피드(기본) / 채팅방 목록 -->
     <nav id="tab-bar" hidden>
@@ -81,6 +84,22 @@
     <footer class="bar">
       <button id="logout-btn">로그아웃</button>
     </footer>
+  </div>
+
+  <!-- 화면 2b: 프로필 설정 -->
+  <div id="settings-screen" hidden>
+    <header class="bar">
+      <button id="settings-back-btn">←</button>
+      <span>프로필 설정</span>
+      <span></span>
+    </header>
+    <main class="settings-body">
+      <div id="settings-avatar" class="avatar avatar-lg">?</div>
+      <input id="avatar-file" type="file" accept="image/*" hidden />
+      <button id="avatar-change-btn" class="primary">프로필 사진 바꾸기</button>
+      <button id="avatar-remove-btn">기본 이미지로</button>
+      <p id="settings-name" class="settings-name"></p>
+    </main>
   </div>
 
   <!-- 화면 3: 1:1 채팅방 -->

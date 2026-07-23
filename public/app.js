@@ -7,9 +7,22 @@
 // ─────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
-const screens = { auth: $('auth-screen'), list: $('list-screen'), chat: $('chat-screen') };
+const screens = { auth: $('auth-screen'), list: $('list-screen'), chat: $('chat-screen'), settings: $('settings-screen') };
 function showScreen(name) {
   for (const key of Object.keys(screens)) screens[key].hidden = key !== name;
+}
+
+// 아바타 자리에 프사가 있으면 사진을, 없으면 이름 앞 두 글자를 표시
+function applyAvatar(el, avatar, fallbackText) {
+  if (avatar) {
+    el.classList.add('has-photo');
+    el.style.backgroundImage = `url("${avatar}")`;
+    el.textContent = '';
+  } else {
+    el.classList.remove('has-photo');
+    el.style.backgroundImage = '';
+    el.textContent = (fallbackText || '?').slice(0, 2);
+  }
 }
 
 let ws = null;
@@ -102,6 +115,38 @@ function logout() {
   location.href = location.pathname; // 주소의 ?b= 부분도 지우고 처음으로
 }
 $('logout-btn').addEventListener('click', logout);
+
+// ─────────── 프로필 설정 ───────────
+function openSettings() {
+  applyAvatar($('settings-avatar'), me.avatar, me.nickname);
+  $('settings-name').textContent = me.nickname + (me.isBroadcaster ? ' (방송인)' : '');
+  showScreen('settings');
+}
+$('settings-btn').addEventListener('click', openSettings);
+$('my-name').addEventListener('click', openSettings);
+$('settings-back-btn').addEventListener('click', () => showScreen('list'));
+$('avatar-change-btn').addEventListener('click', () => $('avatar-file').click());
+$('settings-avatar').addEventListener('click', () => $('avatar-file').click());
+
+$('avatar-file').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file || !ws || ws.readyState !== 1) return;
+  if (!file.type.startsWith('image/')) return alert('이미지 파일만 쓸 수 있어요.');
+  try {
+    // 프사는 작아도 충분하니 256px로 더 작게 압축
+    const dataUrl = await compressImage(file, 256, 0.8);
+    if (dataUrl.length > 500_000) return alert('사진이 너무 커요. 더 작은 사진을 써주세요.');
+    ws.send(JSON.stringify({ type: 'set_avatar', dataUrl }));
+  } catch {
+    alert('사진을 처리하지 못했어요.');
+  }
+});
+
+$('avatar-remove-btn').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'remove_avatar' }));
+});
 
 // ─────────── 앱 진입 (로그인 성공 후) ───────────
 function enterApp() {
@@ -225,6 +270,11 @@ function connect() {
       if (data.roomId === currentRoomId) {
         document.querySelectorAll('.unread').forEach((el) => el.remove());
       }
+    } else if (data.type === 'avatar_set') {
+      // 내 프사가 바뀜 → 저장해두고 설정 화면 즉시 반영
+      me.avatar = data.avatar;
+      localStorage.setItem('fanchat-user', JSON.stringify(me));
+      applyAvatar($('settings-avatar'), me.avatar, me.nickname);
     } else if (data.type === 'announce_done') {
       // 발송 완료 → 피드를 새로 받아서 내 말풍선이 (한 번만) 나타나게
       if (activeTab === 'feed') ws.send(JSON.stringify({ type: 'open_feed' }));
@@ -266,7 +316,7 @@ function renderRoomList(rooms) {
 
     const avatar = document.createElement('div');
     avatar.className = 'avatar';
-    avatar.textContent = room.peer.slice(0, 2);
+    applyAvatar(avatar, room.peerAvatar, room.peer);
 
     const mid = document.createElement('div');
     mid.className = 'room-mid';
@@ -352,7 +402,7 @@ function appendFeedItem(m, scroll = true) {
 
     const avatar = document.createElement('div');
     avatar.className = 'avatar';
-    avatar.textContent = (m.sender_name || '?').slice(0, 2);
+    applyAvatar(avatar, m.sender_avatar, m.sender_name);
 
     const body = document.createElement('div');
     const name = document.createElement('div');

@@ -108,6 +108,22 @@ button.primary:hover { background: #4a3dc4; }
 #conn-status { font-size: 12px; font-weight: normal; }
 .status-on { color: #b5f5c8; }
 .status-off { color: #ffc4c4; }
+#settings-btn { background: none; border: none; color: #fff; font-size: 18px; padding: 2px 6px; margin-left: 6px; }
+#my-name { cursor: pointer; }
+
+/* 프로필 설정 화면 */
+#settings-screen { height: var(--app-height, 100dvh); display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; background: #fff; }
+.settings-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 20px;
+}
+.settings-body .avatar-lg { cursor: pointer; }
+.settings-body button { width: min(280px, 90%); padding: 12px; }
+.settings-name { font-size: 15px; color: #444; margin-top: 8px; }
 
 /* ── 채팅방 목록 ── */
 #invite-box {
@@ -195,7 +211,13 @@ button.primary:hover { background: #4a3dc4; }
   font-weight: bold;
   font-size: 15px;
   flex-shrink: 0;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
 }
+/* 프사가 있으면 배경 이미지로 표시하고 글자는 숨김 */
+.avatar.has-photo { color: transparent; }
+.avatar-lg { width: 100px; height: 100px; font-size: 32px; }
 .room-mid { flex: 1; min-width: 0; }
 .room-peer { font-size: 15px; font-weight: bold; }
 .room-last {

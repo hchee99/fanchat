@@ -61,7 +61,8 @@ async function init() {
       created_at INTEGER NOT NULL,
       security_q TEXT,
       sa_hash TEXT,
-      sa_salt TEXT
+      sa_salt TEXT,
+      avatar TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
@@ -94,6 +95,7 @@ async function init() {
     `ALTER TABLE users ADD COLUMN sa_hash TEXT`,
     `ALTER TABLE users ADD COLUMN sa_salt TEXT`,
     `ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'`,
+    `ALTER TABLE users ADD COLUMN avatar TEXT`,
   ];
   for (const sql of migrations) {
     try { await client.execute(sql); } catch { /* 이미 있음 */ }
