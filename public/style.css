@@ -5,6 +5,7 @@ body {
   font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   background: #f2f3f7;
   height: 100dvh;
+  overflow: hidden; /* 키보드가 올라올 때 페이지 전체가 밀리지 않게 */
 }
 
 /* 화면 전환: hidden 속성이 CSS의 display보다 우선하게 (미니 카카오톡에서 배운 버그 예방!) */
@@ -77,8 +78,10 @@ button.primary:hover { background: #4a3dc4; }
 .error-msg { font-size: 13px; color: #d33; min-height: 18px; }
 
 /* ── 공통 레이아웃 ── */
+/* --app-height는 JS가 "실제로 보이는 영역"(키보드 제외)으로 채워줘요.
+   지원 안 되면 100dvh로 대체. 이게 모바일 키보드 문제의 핵심 수정이에요. */
 #list-screen, #chat-screen {
-  height: 100dvh;
+  height: var(--app-height, 100dvh);
   display: flex;
   flex-direction: column;
   max-width: 480px;
@@ -236,6 +239,16 @@ button.primary:hover { background: #4a3dc4; }
 }
 .mine .bubble { background: #5b4ddb; color: #fff; border-top-right-radius: 3px; }
 .theirs .bubble { background: #fff; border-top-left-radius: 3px; }
+/* 이미지 말풍선: 말풍선 안에 사진을 꽉 채우고 클릭하면 원본 열림 */
+.bubble.image-bubble { padding: 3px; background: none; }
+.bubble.image-bubble img {
+  display: block;
+  max-width: 200px;
+  max-height: 260px;
+  border-radius: 10px;
+  cursor: pointer;
+  object-fit: cover;
+}
 .msg-meta {
   display: flex;
   flex-direction: column;
@@ -245,6 +258,14 @@ button.primary:hover { background: #4a3dc4; }
 }
 .unread { color: #e94a4a; font-weight: bold; }
 
-#input-bar { display: flex; background: #fff; padding: 8px; gap: 8px; }
+#input-bar { display: flex; align-items: center; background: #fff; padding: 8px; gap: 6px; }
+#image-btn {
+  border: none;
+  background: none;
+  font-size: 22px;
+  padding: 4px 6px;
+  cursor: pointer;
+  line-height: 1;
+}
 #msg-input { flex: 1; border: none; outline: none; font-size: 15px; padding: 8px; }
 #send-btn { padding: 8px 16px; }

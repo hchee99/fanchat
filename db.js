@@ -43,7 +43,8 @@ db.exec(`
     sender_id INTEGER NOT NULL,
     text TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    read INTEGER NOT NULL DEFAULT 0
+    read INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT 'text'
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_room ON messages (room_id, id);
@@ -54,5 +55,7 @@ db.exec(`
 for (const col of ['security_q TEXT', 'sa_hash TEXT', 'sa_salt TEXT']) {
   try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* 이미 있음 */ }
 }
+// messages 테이블에도 이미지 구분용 kind 칸 추가 (예전 DB 마이그레이션)
+try { db.exec(`ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'`); } catch { /* 이미 있음 */ }
 
 module.exports = db;

@@ -105,7 +105,7 @@ function getRoomList(userId) {
     SELECT r.id,
       u.nickname AS peer,
       u.is_broadcaster AS peerIsBroadcaster,
-      (SELECT text FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastText,
+      (SELECT CASE WHEN m.kind = 'image' THEN '[사진]' ELSE m.text END FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastText,
       (SELECT created_at FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastTime,
       (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.sender_id != ? AND m.read = 0) AS unread
     FROM rooms r
@@ -183,7 +183,7 @@ wss.on('connection', (ws) => {
       db.prepare('UPDATE messages SET read = 1 WHERE room_id = ? AND sender_id != ?').run(room.id, ws.userId);
       sendTo(peerId, { type: 'read', roomId: room.id }); // 상대 화면의 숫자 1 지우기
 
-      const messages = db.prepare('SELECT id, sender_id, text, created_at, read FROM messages WHERE room_id = ? ORDER BY id')
+      const messages = db.prepare('SELECT id, sender_id, text, created_at, read, kind FROM messages WHERE room_id = ? ORDER BY id')
         .all(room.id);
       ws.send(JSON.stringify({ type: 'history', roomId: room.id, peer: peer.nickname, messages }));
       pushRoomList(ws.userId);
@@ -197,10 +197,33 @@ wss.on('connection', (ws) => {
       if (!text) return;
 
       const now = Date.now();
-      const r = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)')
-        .run(room.id, ws.userId, text, now);
+      const r = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)')
+        .run(room.id, ws.userId, text, now, 'text');
 
-      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text, created_at: now, read: 0 } };
+      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text, created_at: now, read: 0, kind: 'text' } };
+      const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
+      sendTo(ws.userId, msg);
+      sendTo(peerId, msg);
+      pushRoomList(ws.userId);
+      pushRoomList(peerId);
+    }
+
+    // [이미지 전송] 클라이언트가 압축한 이미지(dataURL)를 받아 저장·전달
+    else if (data.type === 'image') {
+      const room = getRoomIfMember(data.roomId, ws.userId);
+      if (!room) return;
+      const dataUrl = String(data.dataUrl || '');
+      // data:image/... 형식만 허용하고, 서버측 크기 상한(약 2MB)으로 남용 방지
+      if (!/^data:image\/(jpeg|png|webp|gif);base64,/.test(dataUrl)) return;
+      if (dataUrl.length > 2_000_000) {
+        return ws.send(JSON.stringify({ type: 'error', text: '이미지가 너무 커요. 더 작은 사진을 보내주세요.' }));
+      }
+
+      const now = Date.now();
+      const r = db.prepare('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)')
+        .run(room.id, ws.userId, dataUrl, now, 'image');
+
+      const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, text: dataUrl, created_at: now, read: 0, kind: 'image' } };
       const peerId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
       sendTo(ws.userId, msg);
       sendTo(peerId, msg);

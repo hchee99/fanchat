@@ -286,8 +286,19 @@ function renderMessage(m) {
   line.className = 'bubble-line';
 
   const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.textContent = m.text;
+  if (m.kind === 'image') {
+    // 이미지 메시지: 말풍선 안에 사진을 넣고, 누르면 원본을 새 탭에서 열기
+    bubble.className = 'bubble image-bubble';
+    const img = document.createElement('img');
+    img.src = m.text; // 압축된 dataURL
+    img.alt = '사진';
+    img.addEventListener('click', () => window.open(m.text, '_blank'));
+    img.addEventListener('load', scrollToBottom); // 사진 로딩 후 높이가 바뀌면 다시 맨 아래로
+    bubble.appendChild(img);
+  } else {
+    bubble.className = 'bubble';
+    bubble.textContent = m.text; // textContent라서 남이 보낸 HTML은 실행되지 않아 안전
+  }
 
   const meta = document.createElement('div');
   meta.className = 'msg-meta';
@@ -333,6 +344,72 @@ $('send-btn').addEventListener('click', sendMessage);
 $('msg-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendMessage();
 });
+
+// ─────────── 이미지 전송 ───────────
+// 사진 버튼 → 파일 선택창 열기
+$('image-btn').addEventListener('click', () => $('image-file').click());
+
+// 파일이 선택되면: 큰 사진을 자동으로 줄여서(압축) 전송. 원본을 그대로 보내면
+// 용량이 너무 커서 저장·전송이 느려지므로, 가로세로 최대 1024px + JPEG 품질 0.7로 압축.
+$('image-file').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // 같은 파일을 또 골라도 change가 다시 발생하게 초기화
+  if (!file || !currentRoomId || !ws || ws.readyState !== 1) return;
+  if (!file.type.startsWith('image/')) return alert('이미지 파일만 보낼 수 있어요.');
+
+  try {
+    const dataUrl = await compressImage(file, 1024, 0.7);
+    if (dataUrl.length > 2_000_000) return alert('사진이 너무 커요. 더 작은 사진을 보내주세요.');
+    ws.send(JSON.stringify({ type: 'image', roomId: currentRoomId, dataUrl }));
+  } catch {
+    alert('사진을 처리하지 못했어요.');
+  }
+});
+
+// 이미지를 canvas에 다시 그려서 크기를 줄이고 JPEG로 변환 (dataURL 반환)
+function compressImage(file, maxSize, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          const scale = maxSize / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─────────── 모바일 키보드 대응 ───────────
+// 키보드가 올라오면 "실제로 보이는 높이"에 화면을 맞추고, 채팅은 맨 아래로 스크롤.
+// visualViewport = 키보드를 뺀 실제 보이는 영역을 알려주는 브라우저 기능.
+function setAppHeight() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+  if (currentRoomId) scrollToBottom();
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', setAppHeight);
+  window.visualViewport.addEventListener('scroll', setAppHeight);
+}
+window.addEventListener('resize', setAppHeight);
+setAppHeight();
+
+// 입력창을 탭해서 키보드가 뜰 때도 최근 메시지가 보이도록 (키보드 애니메이션 후 스크롤)
+$('msg-input').addEventListener('focus', () => setTimeout(scrollToBottom, 300));
 
 // ─────────── 시작: 저장된 로그인이 있으면 바로 입장 ───────────
 // 저장된 값이 손상돼 있어도 앱이 멈추지 않게 try로 감싸고, 실패하면 로그인 화면으로
