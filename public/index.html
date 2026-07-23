@@ -101,8 +101,22 @@
       <button id="avatar-change-btn" class="primary">프로필 사진 바꾸기</button>
       <button id="avatar-remove-btn">기본 이미지로</button>
       <p id="settings-name" class="settings-name"></p>
+      <button id="open-welcome-btn" hidden>입장 인사말 설정</button>
       <button id="open-blocklist-btn">차단 목록 관리</button>
     </main>
+  </div>
+
+  <!-- 입장 인사말 편집 (방송인 전용 오버레이) -->
+  <div id="welcome-view" hidden>
+    <div class="photos-head">
+      <span>입장 인사말</span>
+      <button id="welcome-close-btn">닫기</button>
+    </div>
+    <div class="welcome-body">
+      <p class="welcome-desc">새 팬이 처음 입장할 때 자동으로 보낼 메시지예요.<br />비우고 저장하면 아무 인사말도 안 나가요.</p>
+      <textarea id="welcome-input" placeholder="예) 반가워요! 앞으로 자주 소통해요 😊" maxlength="1000" rows="4"></textarea>
+      <button id="welcome-save-btn" class="primary">저장</button>
+    </div>
   </div>
 
   <!-- 차단 목록 관리 (공용 오버레이) -->

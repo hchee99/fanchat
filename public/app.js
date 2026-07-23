@@ -121,6 +121,7 @@ $('logout-btn').addEventListener('click', logout);
 function openSettings() {
   applyAvatar($('settings-avatar'), me.avatar, me.nickname);
   $('settings-name').textContent = me.nickname + (me.isBroadcaster ? ' (방송인)' : '');
+  $('open-welcome-btn').hidden = !me.isBroadcaster; // 입장 인사말은 방송인만
   showScreen('settings');
 }
 $('settings-btn').addEventListener('click', openSettings);
@@ -158,6 +159,19 @@ $('open-blocklist-btn').addEventListener('click', () => {
   ws.send(JSON.stringify({ type: 'block_list' }));
 });
 $('blocklist-close-btn').addEventListener('click', () => { $('blocklist-view').hidden = true; });
+
+// ─────────── 입장 인사말 설정 (방송인 전용) ───────────
+$('open-welcome-btn').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) return;
+  $('welcome-input').value = '';
+  $('welcome-view').hidden = false;
+  ws.send(JSON.stringify({ type: 'get_welcome' })); // 저장돼 있던 값 불러오기
+});
+$('welcome-close-btn').addEventListener('click', () => { $('welcome-view').hidden = true; });
+$('welcome-save-btn').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'set_welcome', text: $('welcome-input').value }));
+});
 
 function renderBlockList(list) {
   const box = $('blocklist');
@@ -326,6 +340,11 @@ function connect() {
       alert('차단했어요.');
     } else if (data.type === 'block_list') {
       renderBlockList(data.list);
+    } else if (data.type === 'welcome') {
+      $('welcome-input').value = data.text || '';
+    } else if (data.type === 'welcome_saved') {
+      alert(data.text ? '입장 인사말을 저장했어요.' : '입장 인사말을 비웠어요. (이제 안 나가요)');
+      $('welcome-view').hidden = true;
     } else if (data.type === 'avatar_set') {
       // 내 프사가 바뀜 → 저장해두고 설정 화면 즉시 반영
       me.avatar = data.avatar;

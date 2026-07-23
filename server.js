@@ -246,6 +246,23 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      // [입장 인사말 불러오기] 방송인이 편집 화면 열 때
+      if (data.type === 'get_welcome') {
+        if (!ws.isBroadcaster) return;
+        const u = await db.get('SELECT welcome_msg FROM users WHERE id = ?', [ws.userId]);
+        ws.send(JSON.stringify({ type: 'welcome', text: (u && u.welcome_msg) || '' }));
+        return;
+      }
+
+      // [입장 인사말 저장] 빈 값이면 해제(안 뜨게)
+      if (data.type === 'set_welcome') {
+        if (!ws.isBroadcaster) return;
+        const text = String(data.text || '').slice(0, 1000).trim();
+        await db.run('UPDATE users SET welcome_msg = ? WHERE id = ?', [text || null, ws.userId]);
+        ws.send(JSON.stringify({ type: 'welcome_saved', text }));
+        return;
+      }
+
       // [방송인 방 만들기] 팬이 초대 링크로 들어옴 → 그 방송인과의 방을 찾거나 새로 만듦
       if (data.type === 'join_broadcaster') {
         const b = await db.get('SELECT * FROM users WHERE nickname = ? AND is_broadcaster = 1', [String(data.nickname || '')]);
@@ -254,8 +271,13 @@ wss.on('connection', (ws) => {
 
         let room = await db.get('SELECT * FROM rooms WHERE broadcaster_id = ? AND fan_id = ?', [b.id, ws.userId]);
         if (!room) {
-          const r = await db.run('INSERT INTO rooms (broadcaster_id, fan_id, created_at) VALUES (?, ?, ?)', [b.id, ws.userId, Date.now()]);
+          const now = Date.now();
+          const r = await db.run('INSERT INTO rooms (broadcaster_id, fan_id, created_at) VALUES (?, ?, ?)', [b.id, ws.userId, now]);
           room = { id: r.lastInsertRowid };
+          // 방송인이 입장 인사말을 설정해뒀으면, 새 방에 방송인 이름으로 자동 발송 (첫 입장 1회)
+          if (b.welcome_msg) {
+            await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, b.id, b.welcome_msg, now, 'text']);
+          }
           await pushRoomList(b.id); // 방송인 목록에도 새 방이 뜨게
         }
         await pushRoomList(ws.userId);
