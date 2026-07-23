@@ -154,6 +154,7 @@ button.primary:hover { background: #4a3dc4; }
 /* 통합 피드 */
 #feed-view {
   flex: 1;
+  min-height: 0; /* flexbox 함정 방지: 내용이 많아도 영역이 줄어들며 내부 스크롤 */
   overflow-y: auto;
   padding: 12px;
   display: flex;
@@ -190,7 +191,7 @@ button.primary:hover { background: #4a3dc4; }
 }
 #add-box button { padding: 9px 16px; }
 
-#room-list { flex: 1; overflow-y: auto; }
+#room-list { flex: 1; min-height: 0; overflow-y: auto; }
 .room-item {
   display: flex;
   gap: 12px;
@@ -266,6 +267,7 @@ button.primary:hover { background: #4a3dc4; }
 /* ── 채팅방 (말풍선은 미니 카카오톡에서 가져옴) ── */
 #messages {
   flex: 1;
+  min-height: 0; /* flexbox 함정 방지: 내용이 많아도 영역이 줄어들며 내부 스크롤 */
   overflow-y: auto;
   padding: 12px;
   display: flex;
