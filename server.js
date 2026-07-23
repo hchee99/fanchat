@@ -42,32 +42,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 임시 진단용 — Turso 연결 상태를 비밀 안 새게 확인. 문제 해결 후 제거 예정.
-app.get('/api/diag', async (req, res) => {
-  const url = process.env.TURSO_DATABASE_URL || '';
-  let scheme = '', host = '', hostEndsTursoIo = false;
-  try {
-    const u = new URL(url);
-    scheme = u.protocol;
-    host = u.hostname;
-    hostEndsTursoIo = host.endsWith('.turso.io');
-  } catch { /* URL 파싱 실패 */ }
-  let userCount = null, dbError = null;
-  try {
-    const row = await db.get('SELECT COUNT(*) AS c FROM users');
-    userCount = row ? Number(row.c) : null;
-  } catch (e) { dbError = e.message; }
-  res.json({
-    scheme,                         // 기대: "libsql:"
-    hostEndsTursoIo,                // 기대: true
-    hostLen: host.length,
-    hasAuthToken: !!process.env.TURSO_AUTH_TOKEN,
-    authTokenLen: (process.env.TURSO_AUTH_TOKEN || '').length,
-    userCount,                      // Turso가 공유되면 그동안 만든 계정이 다 쌓여있어야 함
-    dbError,
-  });
-});
-
 // ─────────── 회원가입 / 로그인 (HTTP API) ───────────
 app.post('/api/signup', async (req, res) => {
   const nickname = String(req.body.nickname || '').trim().slice(0, 20);
