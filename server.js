@@ -293,6 +293,25 @@ wss.on('connection', (ws) => {
       // 전체 발송(announce)은 방마다 복사돼 저장되므로, 같은 내용+시각은 하나로 합쳐요(중복 제거).
       else if (data.type === 'open_feed') {
         if (!ws.isBroadcaster) return;
+
+        // 피드를 여는 것도 "읽음"으로 처리 — 안 그러면 팬 화면의 숫자 1이
+        // 방송인이 1:1 방을 일일이 열기 전까지 안 사라져요
+        const unreadRooms = await db.all(`
+          SELECT DISTINCT m.room_id, r.fan_id
+          FROM messages m JOIN rooms r ON r.id = m.room_id
+          WHERE r.broadcaster_id = ? AND m.sender_id != ? AND m.read = 0
+        `, [ws.userId, ws.userId]);
+        if (unreadRooms.length > 0) {
+          await db.run(`
+            UPDATE messages SET read = 1
+            WHERE room_id IN (SELECT id FROM rooms WHERE broadcaster_id = ?) AND sender_id != ?
+          `, [ws.userId, ws.userId]);
+          for (const row of unreadRooms) {
+            sendTo(row.fan_id, { type: 'read', roomId: row.room_id }); // 팬 화면의 1 지우기
+          }
+          await pushRoomList(ws.userId); // 내 방 목록 배지도 갱신
+        }
+
         const items = await db.all(`
           SELECT m.id, m.room_id, m.sender_id, m.text, m.created_at, m.kind, u.nickname AS sender_name
           FROM messages m

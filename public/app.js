@@ -469,10 +469,14 @@ function openLightbox(src) {
 }
 
 function onChat(data) {
-  // 방송인이 피드를 보고 있으면: 팬의 새 메시지를 피드에 실시간으로 추가
+  // 방송인이 피드를 보고 있으면: 팬의 새 메시지를 피드에 실시간으로 추가하고,
+  // 화면을 실제로 보고 있다면 바로 읽음 처리 (팬 화면의 숫자 1이 사라지게)
   if (me.isBroadcaster && activeTab === 'feed' && !$('feed-view').hidden
       && currentRoomId === null && data.message.sender_id !== me.id) {
     appendFeedItem({ ...data.message, room_id: data.roomId });
+    if (document.visibilityState === 'visible') {
+      ws.send(JSON.stringify({ type: 'read', roomId: data.roomId }));
+    }
   }
   if (data.roomId !== currentRoomId) return; // 다른 방 메시지면 목록 배지가 알아서 갱신됨
   renderMessage(data.message);
