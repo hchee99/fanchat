@@ -292,7 +292,7 @@ function renderMessage(m) {
     const img = document.createElement('img');
     img.src = m.text; // 압축된 dataURL
     img.alt = '사진';
-    img.addEventListener('click', () => window.open(m.text, '_blank'));
+    img.addEventListener('click', () => openLightbox(m.text));
     img.addEventListener('load', scrollToBottom); // 사진 로딩 후 높이가 바뀌면 다시 맨 아래로
     bubble.appendChild(img);
   } else {
@@ -321,6 +321,19 @@ function renderMessage(m) {
 
 function scrollToBottom() {
   $('messages').scrollTop = $('messages').scrollHeight;
+}
+
+// 사진 크게 보기: 새 탭은 브라우저가 data 주소를 차단하므로,
+// 앱 안에서 어두운 배경 위에 크게 띄우고 아무 데나 누르면 닫히게 (카톡 방식)
+function openLightbox(src) {
+  const overlay = document.createElement('div');
+  overlay.id = 'lightbox';
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = '사진 크게 보기';
+  overlay.appendChild(img);
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
 }
 
 function onChat(data) {

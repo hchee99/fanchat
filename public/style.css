@@ -239,7 +239,24 @@ button.primary:hover { background: #4a3dc4; }
 }
 .mine .bubble { background: #5b4ddb; color: #fff; border-top-right-radius: 3px; }
 .theirs .bubble { background: #fff; border-top-left-radius: 3px; }
-/* 이미지 말풍선: 말풍선 안에 사진을 꽉 채우고 클릭하면 원본 열림 */
+/* 사진 크게 보기 (라이트박스) */
+#lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: zoom-out;
+}
+#lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  border-radius: 8px;
+}
+
+/* 이미지 말풍선: 말풍선 안에 사진을 꽉 채우고 클릭하면 크게 보기 */
 .bubble.image-bubble { padding: 3px; background: none; }
 .bubble.image-bubble img {
   display: block;
