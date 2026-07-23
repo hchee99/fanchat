@@ -722,11 +722,10 @@ function compressImage(file, maxSize, quality) {
 // ─────────── 모바일 키보드 대응 ───────────
 // 키보드가 올라오면 "실제로 보이는 높이"에 화면을 맞추고, 채팅은 맨 아래로 스크롤.
 // visualViewport = 키보드를 뺀 실제 보이는 영역을 알려주는 브라우저 기능.
+// 높이는 CSS(100dvh + interactive-widget)가 알아서 맞추므로, JS는 키보드가 뜰 때
+// 맨 아래로 스크롤만 담당해요 (입력한 최신 메시지가 바로 보이게).
 function setAppHeight() {
-  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  document.documentElement.style.setProperty('--app-height', h + 'px');
   if (currentRoomId) scrollToBottom();
-  // 단톡 피드도 키보드 열릴 때 맨 아래로 (입력창이 키보드 위에 남게)
   else if (me && me.isBroadcaster && activeTab === 'feed') {
     const fv = $('feed-view');
     if (fv) fv.scrollTop = fv.scrollHeight;

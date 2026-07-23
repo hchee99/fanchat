@@ -1,15 +1,12 @@
 /* fanchat 화면 스타일 */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { overflow: hidden; height: 100%; }
+html { overflow: hidden; height: 100dvh; }
 body {
   font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   background: #f2f3f7;
-  height: var(--app-height, 100dvh);
-  overflow: hidden; /* 키보드가 올라올 때 페이지 전체가 밀리지 않게 */
-  position: fixed;  /* 문서 자체가 스크롤/이동하지 못하게 고정 */
-  width: 100%;
-  top: 0; left: 0;
+  height: 100dvh;   /* interactive-widget 덕분에 키보드가 뜨면 이 값이 자동으로 줄어듦 */
+  overflow: hidden;
 }
 
 /* 화면 전환: hidden 속성이 CSS의 display보다 우선하게 (미니 카카오톡에서 배운 버그 예방!) */
@@ -82,10 +79,10 @@ button.primary:hover { background: #4a3dc4; }
 .error-msg { font-size: 13px; color: #d33; min-height: 18px; }
 
 /* ── 공통 레이아웃 ── */
-/* --app-height는 JS가 "실제로 보이는 영역"(키보드 제외)으로 채워줘요.
-   지원 안 되면 100dvh로 대체. 이게 모바일 키보드 문제의 핵심 수정이에요. */
+/* 100dvh + interactive-widget=resizes-content: 키보드가 뜨면 브라우저가
+   화면 높이를 자동으로 줄여줘서, 입력창이 키보드 바로 위에 붙어요. */
 #list-screen, #chat-screen {
-  height: var(--app-height, 100dvh);
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   max-width: 480px;
@@ -116,7 +113,7 @@ button.primary:hover { background: #4a3dc4; }
 #my-name { cursor: pointer; }
 
 /* 프로필 설정 화면 */
-#settings-screen { height: var(--app-height, 100dvh); display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; background: #fff; }
+#settings-screen { height: 100dvh; display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; background: #fff; }
 .settings-body {
   flex: 1;
   display: flex;
