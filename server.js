@@ -34,6 +34,14 @@ function normalizeAnswer(a) {
   return String(a || '').trim().toLowerCase();
 }
 
+// 서버 상태 확인용 (지금 어떤 저장소를 쓰는지 — Turso 연결 문제 진단에 사용)
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    storage: process.env.TURSO_DATABASE_URL ? 'turso' : 'file',
+  });
+});
+
 // ─────────── 회원가입 / 로그인 (HTTP API) ───────────
 app.post('/api/signup', async (req, res) => {
   const nickname = String(req.body.nickname || '').trim().slice(0, 20);
