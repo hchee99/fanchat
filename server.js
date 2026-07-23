@@ -122,13 +122,36 @@ function getRoomList(userId) {
       (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.sender_id != ? AND m.read = 0) AS unread
     FROM rooms r
     JOIN users u ON u.id = CASE WHEN r.broadcaster_id = ? THEN r.fan_id ELSE r.broadcaster_id END
-    WHERE r.broadcaster_id = ? OR r.fan_id = ?
+    WHERE (r.broadcaster_id = ? OR r.fan_id = ?)
+      AND NOT EXISTS (
+        SELECT 1 FROM blocks b
+        WHERE (b.blocker_id = r.broadcaster_id AND b.blocked_id = r.fan_id)
+           OR (b.blocker_id = r.fan_id AND b.blocked_id = r.broadcaster_id)
+      )
     ORDER BY COALESCE(lastTime, r.created_at) DESC
   `, [userId, userId, userId, userId]);
 }
 
 function getRoomIfMember(roomId, userId) {
   return db.get('SELECT * FROM rooms WHERE id = ? AND (broadcaster_id = ? OR fan_id = ?)', [roomId, userId, userId]);
+}
+
+// 두 사람 사이에 (어느 방향이든) 차단이 있으면 true — 차단은 양방향으로 막아요
+async function isBlockedBetween(a, b) {
+  const row = await db.get(
+    'SELECT 1 AS x FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1',
+    [a, b, b, a]
+  );
+  return !!row;
+}
+
+// 내가 차단한 사람 목록 (관리 화면용)
+function getBlockList(userId) {
+  return db.all(
+    `SELECT u.id, u.nickname, u.avatar FROM blocks b JOIN users u ON u.id = b.blocked_id
+     WHERE b.blocker_id = ? ORDER BY b.created_at DESC`,
+    [userId]
+  );
 }
 
 // 특정 사람에게 보내기 (접속 중인 모든 기기로)
@@ -165,7 +188,9 @@ wss.on('connection', (ws) => {
         ws.avatar = u ? (u.avatar || null) : null;
         if (!online.has(ws.userId)) online.set(ws.userId, new Set());
         online.get(ws.userId).add(ws);
-        ws.send(JSON.stringify({ type: 'auth_ok' }));
+        // 토큰이 가리키는 "진짜 내 정보"를 함께 보내 클라이언트의 저장값을 바로잡음
+        // (재배포/DB초기화로 저장된 id가 실제와 어긋나면 내 메시지를 못 알아보던 문제 해결)
+        ws.send(JSON.stringify({ type: 'auth_ok', me: { id: ws.userId, nickname: ws.nickname, isBroadcaster: ws.isBroadcaster, avatar: ws.avatar } }));
         await pushRoomList(ws.userId);
         return;
       }
@@ -190,6 +215,34 @@ wss.on('connection', (ws) => {
         await db.run('UPDATE users SET avatar = NULL WHERE id = ?', [ws.userId]);
         ws.avatar = null;
         ws.send(JSON.stringify({ type: 'avatar_set', avatar: null }));
+        return;
+      }
+
+      // [차단] 이 방의 상대를 차단 — 이후 서로 메시지 못 보내고 목록에서 사라짐
+      if (data.type === 'block_user') {
+        const room = await getRoomIfMember(data.roomId, ws.userId);
+        if (!room) return;
+        const targetId = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
+        await db.run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)', [ws.userId, targetId, Date.now()]);
+        ws.send(JSON.stringify({ type: 'blocked', roomId: room.id }));
+        await pushRoomList(ws.userId);   // 내 목록에서 사라지게
+        await pushRoomList(targetId);    // 상대 목록에서도 사라지게
+        return;
+      }
+
+      // [차단 해제]
+      if (data.type === 'unblock_user') {
+        const targetId = Number(data.targetId);
+        await db.run('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?', [ws.userId, targetId]);
+        ws.send(JSON.stringify({ type: 'block_list', list: await getBlockList(ws.userId) }));
+        await pushRoomList(ws.userId);
+        await pushRoomList(targetId);
+        return;
+      }
+
+      // [차단 목록] 내가 차단한 사람들
+      if (data.type === 'block_list') {
+        ws.send(JSON.stringify({ type: 'block_list', list: await getBlockList(ws.userId) }));
         return;
       }
 
@@ -256,6 +309,10 @@ wss.on('connection', (ws) => {
         if (!room) return;
         const text = String(data.text || '').slice(0, 1000).trim();
         if (!text) return;
+        const peerId0 = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
+        if (await isBlockedBetween(ws.userId, peerId0)) {
+          return ws.send(JSON.stringify({ type: 'error', text: '차단된 상대에게는 메시지를 보낼 수 없어요.' }));
+        }
 
         const now = Date.now();
         const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, text, now, 'text']);
@@ -278,6 +335,10 @@ wss.on('connection', (ws) => {
         if (dataUrl.length > 2_000_000) {
           return ws.send(JSON.stringify({ type: 'error', text: '이미지가 너무 커요. 더 작은 사진을 보내주세요.' }));
         }
+        const peerIdImg = room.broadcaster_id === ws.userId ? room.fan_id : room.broadcaster_id;
+        if (await isBlockedBetween(ws.userId, peerIdImg)) {
+          return ws.send(JSON.stringify({ type: 'error', text: '차단된 상대에게는 사진을 보낼 수 없어요.' }));
+        }
 
         const now = Date.now();
         const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, dataUrl, now, 'image']);
@@ -297,7 +358,11 @@ wss.on('connection', (ws) => {
         const text = String(data.text || '').slice(0, 1000).trim();
         if (!text) return;
 
-        const rooms = await db.all('SELECT * FROM rooms WHERE broadcaster_id = ?', [ws.userId]);
+        const rooms = await db.all(
+          `SELECT * FROM rooms WHERE broadcaster_id = ?
+           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = broadcaster_id AND b.blocked_id = fan_id) OR (b.blocker_id = fan_id AND b.blocked_id = broadcaster_id))`,
+          [ws.userId]
+        );
         const now = Date.now();
         const affectedUsers = new Set();
 
@@ -323,7 +388,11 @@ wss.on('connection', (ws) => {
           return ws.send(JSON.stringify({ type: 'error', text: '이미지가 너무 커요. 더 작은 사진을 보내주세요.' }));
         }
 
-        const rooms = await db.all('SELECT * FROM rooms WHERE broadcaster_id = ?', [ws.userId]);
+        const rooms = await db.all(
+          `SELECT * FROM rooms WHERE broadcaster_id = ?
+           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = broadcaster_id AND b.blocked_id = fan_id) OR (b.blocker_id = fan_id AND b.blocked_id = broadcaster_id))`,
+          [ws.userId]
+        );
         const now = Date.now();
         const affectedUsers = new Set();
 
@@ -361,13 +430,22 @@ wss.on('connection', (ws) => {
           await pushRoomList(ws.userId); // 내 방 목록 배지도 갱신
         }
 
+        // 사진은 원본(수백 KB)을 피드 타임라인에 싣지 않고 빈 값으로 → 딜레이 해소.
+        // (실제 사진은 사진 모아보기나 1:1 방에서 로드) 차단한 팬의 메시지는 제외.
         const items = await db.all(`
-          SELECT m.id, m.room_id, m.sender_id, m.text, m.created_at, m.kind, u.nickname AS sender_name, u.avatar AS sender_avatar
+          SELECT m.id, m.room_id, m.sender_id,
+            CASE WHEN m.kind IN ('image', 'announce_image') THEN '' ELSE m.text END AS text,
+            m.created_at, m.kind, u.nickname AS sender_name, u.avatar AS sender_avatar
           FROM messages m
           JOIN rooms r ON r.id = m.room_id
           JOIN users u ON u.id = m.sender_id
           WHERE r.broadcaster_id = ?
             AND (m.sender_id != ? OR m.kind IN ('announce', 'announce_image'))
+            AND NOT EXISTS (
+              SELECT 1 FROM blocks b
+              WHERE (b.blocker_id = r.broadcaster_id AND b.blocked_id = r.fan_id)
+                 OR (b.blocker_id = r.fan_id AND b.blocked_id = r.broadcaster_id)
+            )
           GROUP BY CASE WHEN m.kind IN ('announce', 'announce_image') THEN 'a' || m.created_at ELSE 'm' || m.id END
           ORDER BY m.created_at DESC, m.id DESC
           LIMIT 100

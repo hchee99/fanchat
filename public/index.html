@@ -100,7 +100,18 @@
       <button id="avatar-change-btn" class="primary">프로필 사진 바꾸기</button>
       <button id="avatar-remove-btn">기본 이미지로</button>
       <p id="settings-name" class="settings-name"></p>
+      <button id="open-blocklist-btn">차단 목록 관리</button>
     </main>
+  </div>
+
+  <!-- 차단 목록 관리 (공용 오버레이) -->
+  <div id="blocklist-view" hidden>
+    <div class="photos-head">
+      <span>차단 목록</span>
+      <button id="blocklist-close-btn">닫기</button>
+    </div>
+    <div id="blocklist"></div>
+    <p id="blocklist-empty" hidden>차단한 사용자가 없어요.</p>
   </div>
 
   <!-- 화면 3: 1:1 채팅방 -->
@@ -113,6 +124,11 @@
       </span>
       <button id="room-menu-btn" aria-label="메뉴">⋮</button>
     </header>
+    <!-- 채팅방 메뉴 (⋮ 누르면 뜸) -->
+    <div id="room-menu" hidden>
+      <button id="menu-photos-btn">사진 모아보기</button>
+      <button id="menu-block-btn">차단하기</button>
+    </div>
     <main id="messages"></main>
     <footer id="input-bar">
       <button id="image-btn" title="사진 보내기" aria-label="사진 보내기">📷</button>

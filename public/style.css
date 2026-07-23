@@ -1,11 +1,15 @@
 /* fanchat 화면 스타일 */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { overflow: hidden; height: 100%; }
 body {
   font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   background: #f2f3f7;
-  height: 100dvh;
+  height: var(--app-height, 100dvh);
   overflow: hidden; /* 키보드가 올라올 때 페이지 전체가 밀리지 않게 */
+  position: fixed;  /* 문서 자체가 스크롤/이동하지 못하게 고정 */
+  width: 100%;
+  top: 0; left: 0;
 }
 
 /* 화면 전환: hidden 속성이 CSS의 display보다 우선하게 (미니 카카오톡에서 배운 버그 예방!) */
@@ -324,6 +328,43 @@ button.primary:hover { background: #4a3dc4; }
 .unread { color: #e94a4a; font-weight: bold; }
 
 #room-menu-btn { background: none; border: none; color: #fff; font-size: 22px; padding: 2px 8px; line-height: 1; }
+
+/* 채팅방 ⋮ 메뉴 (오른쪽 위 드롭다운) */
+#room-menu {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  z-index: 40;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+#room-menu button {
+  border: none;
+  border-radius: 0;
+  background: #fff;
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+#room-menu button:hover { background: #f5f5fb; }
+#menu-block-btn { color: #e94a4a; border-top: 1px solid #f0f0f0; }
+
+/* 차단 목록 오버레이 (사진 모아보기와 동일 스타일 재사용) */
+#blocklist-view {
+  position: fixed; inset: 0; max-width: 480px; margin: 0 auto;
+  background: #fff; z-index: 50; display: flex; flex-direction: column;
+}
+#blocklist { flex: 1; overflow-y: auto; }
+.block-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #f0f0f0; }
+.block-item .block-name { flex: 1; font-size: 15px; }
+.block-item button { padding: 7px 14px; font-size: 13px; }
+#blocklist-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px; }
 #feed-photos-btn { background: none; border: none; color: #fff; font-size: 16px; padding: 2px 6px; margin-left: 4px; }
 
 /* 사진 모아보기 (공용 오버레이 — 앱 열 위에 뜸, 480px 열에 맞춤) */

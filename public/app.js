@@ -149,6 +149,41 @@ $('avatar-remove-btn').addEventListener('click', () => {
   ws.send(JSON.stringify({ type: 'remove_avatar' }));
 });
 
+// ─────────── 차단 목록 관리 ───────────
+$('open-blocklist-btn').addEventListener('click', () => {
+  if (!ws || ws.readyState !== 1) return;
+  $('blocklist').innerHTML = '';
+  $('blocklist-empty').hidden = true;
+  $('blocklist-view').hidden = false;
+  ws.send(JSON.stringify({ type: 'block_list' }));
+});
+$('blocklist-close-btn').addEventListener('click', () => { $('blocklist-view').hidden = true; });
+
+function renderBlockList(list) {
+  const box = $('blocklist');
+  box.innerHTML = '';
+  $('blocklist-empty').hidden = list.length > 0;
+  for (const u of list) {
+    const item = document.createElement('div');
+    item.className = 'block-item';
+    const av = document.createElement('div');
+    av.className = 'avatar';
+    applyAvatar(av, u.avatar, u.nickname);
+    const name = document.createElement('div');
+    name.className = 'block-name';
+    name.textContent = u.nickname;
+    const btn = document.createElement('button');
+    btn.textContent = '차단 해제';
+    btn.addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'unblock_user', targetId: u.id }));
+    });
+    item.appendChild(av);
+    item.appendChild(name);
+    item.appendChild(btn);
+    box.appendChild(item);
+  }
+}
+
 // ─────────── 앱 진입 (로그인 성공 후) ───────────
 function enterApp() {
   $('my-name').textContent = me.nickname + (me.isBroadcaster ? ' (방송인)' : '');
@@ -248,6 +283,12 @@ function connect() {
     if (data.type === 'auth_fail') {
       logout(); // 토큰이 낡았으면 다시 로그인
     } else if (data.type === 'auth_ok') {
+      // 서버가 알려준 "진짜 내 정보"로 저장값을 바로잡음 (내 메시지 인식 오류 방지)
+      if (data.me) {
+        me = { ...me, ...data.me };
+        localStorage.setItem('fanchat-user', JSON.stringify(me));
+        if (currentRoomId) ws.send(JSON.stringify({ type: 'open_room', roomId: currentRoomId })); // 열린 방 다시 그려 정렬 교정
+      }
       // 초대 링크로 들어왔다면 그 방송인의 방으로 바로 이동
       if (pendingJoin) {
         ws.send(JSON.stringify({ type: 'join_broadcaster', nickname: pendingJoin }));
@@ -276,6 +317,15 @@ function connect() {
       if (data.roomId === currentRoomId) renderPhotos(data.photos);
     } else if (data.type === 'feed_photos') {
       renderPhotos(data.photos);
+    } else if (data.type === 'blocked') {
+      // 차단 완료 → 방에서 나와 목록으로 (그 방은 목록에서 사라짐)
+      if (data.roomId === currentRoomId) {
+        currentRoomId = null;
+        showScreen('list');
+      }
+      alert('차단했어요.');
+    } else if (data.type === 'block_list') {
+      renderBlockList(data.list);
     } else if (data.type === 'avatar_set') {
       // 내 프사가 바뀜 → 저장해두고 설정 화면 즉시 반영
       me.avatar = data.avatar;
@@ -380,13 +430,20 @@ function appendFeedItem(m, scroll = true) {
     const wrap = document.createElement('div');
     wrap.className = 'feed-mine';
     const bubble = document.createElement('div');
-    if (m.kind === 'image' || m.kind === 'announce_image') {
+    if ((m.kind === 'image' || m.kind === 'announce_image') && m.text) {
+      // 실시간 메시지는 사진 데이터를 갖고 있어 인라인 표시
       bubble.className = 'bubble image-bubble';
       const img = document.createElement('img');
       img.src = m.text;
       img.alt = '사진';
       img.addEventListener('click', () => openLightbox(m.text));
       bubble.appendChild(img);
+    } else if (m.kind === 'image' || m.kind === 'announce_image') {
+      // 피드에서 불러온 사진은 원본을 안 실어서 가볍게 "[사진]"으로 (모아보기에서 봄)
+      bubble.className = 'bubble';
+      bubble.style.background = '#5b4ddb';
+      bubble.style.color = '#fff';
+      bubble.textContent = '[사진]';
     } else {
       bubble.className = 'bubble';
       bubble.style.background = '#5b4ddb';
@@ -415,7 +472,7 @@ function appendFeedItem(m, scroll = true) {
     name.className = 'feed-fan-name';
     name.textContent = m.sender_name + ' · ' + formatTime(m.created_at);
     const bubble = document.createElement('div');
-    if (m.kind === 'image') {
+    if (m.kind === 'image' && m.text) {
       bubble.className = 'bubble image-bubble';
       const img = document.createElement('img');
       img.src = m.text;
@@ -426,6 +483,9 @@ function appendFeedItem(m, scroll = true) {
         openLightbox(m.text);
       });
       bubble.appendChild(img);
+    } else if (m.kind === 'image') {
+      bubble.className = 'bubble';
+      bubble.textContent = '[사진]'; // 피드에선 가볍게 표시, 누르면 방으로 이동
     } else {
       bubble.className = 'bubble';
       bubble.textContent = m.text;
@@ -456,10 +516,23 @@ function openPhotos(title, requestMsg) {
   $('photos-view').hidden = false;
   ws.send(JSON.stringify(requestMsg));
 }
-// 1:1 방 메뉴 → 이 방 사진
-$('room-menu-btn').addEventListener('click', () => {
-  if (!currentRoomId) return;
-  openPhotos('사진 모아보기', { type: 'room_photos', roomId: currentRoomId });
+// 1:1 방 ⋮ 버튼 → 메뉴 열고 닫기
+$('room-menu-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('room-menu').hidden = !$('room-menu').hidden;
+});
+// 바깥을 누르면 메뉴 닫기
+document.addEventListener('click', () => { $('room-menu').hidden = true; });
+$('menu-photos-btn').addEventListener('click', () => {
+  $('room-menu').hidden = true;
+  if (currentRoomId) openPhotos('사진 모아보기', { type: 'room_photos', roomId: currentRoomId });
+});
+$('menu-block-btn').addEventListener('click', () => {
+  $('room-menu').hidden = true;
+  if (!currentRoomId || !ws || ws.readyState !== 1) return;
+  const who = currentPeer ? currentPeer.name : '이 사용자';
+  if (!confirm(`${who}님을 차단할까요?\n차단하면 서로 메시지를 주고받을 수 없고 목록에서 사라져요.`)) return;
+  ws.send(JSON.stringify({ type: 'block_user', roomId: currentRoomId }));
 });
 // 단톡 헤더 🖼 → 모든 팬 방 사진
 $('feed-photos-btn').addEventListener('click', () => {
@@ -653,6 +726,11 @@ function setAppHeight() {
   const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   document.documentElement.style.setProperty('--app-height', h + 'px');
   if (currentRoomId) scrollToBottom();
+  // 단톡 피드도 키보드 열릴 때 맨 아래로 (입력창이 키보드 위에 남게)
+  else if (me && me.isBroadcaster && activeTab === 'feed') {
+    const fv = $('feed-view');
+    if (fv) fv.scrollTop = fv.scrollHeight;
+  }
 }
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', setAppHeight);

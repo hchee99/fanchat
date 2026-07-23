@@ -85,6 +85,13 @@ async function init() {
       read INTEGER NOT NULL DEFAULT 0,
       kind TEXT NOT NULL DEFAULT 'text'
     )`,
+    `CREATE TABLE IF NOT EXISTS blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blocker_id INTEGER NOT NULL,
+      blocked_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE (blocker_id, blocked_id)
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_messages_room ON messages (room_id, id)`,
   ];
   for (const sql of tables) await client.execute(sql);
