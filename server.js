@@ -235,6 +235,21 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'room_photos', roomId: room.id, photos }));
       }
 
+      // [단톡 사진 모아보기] 방송인 전용: 모든 팬 방의 사진을 최신순으로.
+      // 전체 발송 사진은 방마다 복사돼 있으니 같은 시각끼리 하나로 합침(중복 제거).
+      else if (data.type === 'feed_photos') {
+        if (!ws.isBroadcaster) return;
+        const photos = await db.all(`
+          SELECT m.id, m.text
+          FROM messages m JOIN rooms r ON r.id = m.room_id
+          WHERE r.broadcaster_id = ? AND m.kind IN ('image', 'announce_image')
+          GROUP BY CASE WHEN m.kind = 'announce_image' THEN 'a' || m.created_at ELSE 'm' || m.id END
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT 300
+        `, [ws.userId]);
+        ws.send(JSON.stringify({ type: 'feed_photos', photos }));
+      }
+
       // [채팅] 저장하고 → 나와 상대 모두에게 전달 (미니 카카오톡과 같은 심장부)
       else if (data.type === 'chat') {
         const room = await getRoomIfMember(data.roomId, ws.userId);

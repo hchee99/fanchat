@@ -154,6 +154,7 @@ function enterApp() {
   // 방송인: 탭(전체 피드 기본) / 팬: 방송인 추가 입력칸 + 방 목록만
   $('tab-bar').hidden = !me.isBroadcaster;
   $('add-box').hidden = me.isBroadcaster;
+  $('feed-photos-btn').hidden = !me.isBroadcaster; // 단톡 사진 모아보기는 방송인만
   showScreen('list');
   showTab(me.isBroadcaster ? 'feed' : 'rooms');
   connect();
@@ -272,6 +273,8 @@ function connect() {
       }
     } else if (data.type === 'room_photos') {
       if (data.roomId === currentRoomId) renderPhotos(data.photos);
+    } else if (data.type === 'feed_photos') {
+      renderPhotos(data.photos);
     } else if (data.type === 'avatar_set') {
       // 내 프사가 바뀜 → 저장해두고 설정 화면 즉시 반영
       me.avatar = data.avatar;
@@ -443,13 +446,23 @@ function openRoom(roomId) {
   ws.send(JSON.stringify({ type: 'open_room', roomId }));
 }
 
-// ─────────── 사진 모아보기 ───────────
-$('room-menu-btn').addEventListener('click', () => {
-  if (!currentRoomId || !ws || ws.readyState !== 1) return;
+// ─────────── 사진 모아보기 (1:1 방 + 단톡 공용) ───────────
+function openPhotos(title, requestMsg) {
+  if (!ws || ws.readyState !== 1) return;
+  $('photos-title').textContent = title;
   $('photos-grid').innerHTML = '';
   $('photos-empty').hidden = true;
   $('photos-view').hidden = false;
-  ws.send(JSON.stringify({ type: 'room_photos', roomId: currentRoomId }));
+  ws.send(JSON.stringify(requestMsg));
+}
+// 1:1 방 메뉴 → 이 방 사진
+$('room-menu-btn').addEventListener('click', () => {
+  if (!currentRoomId) return;
+  openPhotos('사진 모아보기', { type: 'room_photos', roomId: currentRoomId });
+});
+// 단톡 헤더 🖼 → 모든 팬 방 사진
+$('feed-photos-btn').addEventListener('click', () => {
+  openPhotos('단톡 사진 모아보기', { type: 'feed_photos' });
 });
 $('photos-close-btn').addEventListener('click', () => { $('photos-view').hidden = true; });
 
