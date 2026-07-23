@@ -108,7 +108,7 @@ function getRoomList(userId) {
     SELECT r.id,
       u.nickname AS peer,
       u.is_broadcaster AS peerIsBroadcaster,
-      (SELECT CASE WHEN m.kind = 'image' THEN '[사진]' ELSE m.text END FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastText,
+      (SELECT CASE WHEN m.kind IN ('image', 'announce_image') THEN '[사진]' ELSE m.text END FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastText,
       (SELECT created_at FROM messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS lastTime,
       (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.sender_id != ? AND m.read = 0) AS unread
     FROM rooms r
@@ -257,6 +257,30 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'announce_done', count: rooms.length }));
       }
 
+      // [사진 전체 발송] 텍스트 공지와 같은 구조 — 사진을 모든 팬 방에 개별 발송
+      else if (data.type === 'announce_image') {
+        if (!ws.isBroadcaster) return; // 방송인만 가능
+        const dataUrl = String(data.dataUrl || '');
+        if (!/^data:image\/(jpeg|png|webp|gif);base64,/.test(dataUrl)) return;
+        if (dataUrl.length > 2_000_000) {
+          return ws.send(JSON.stringify({ type: 'error', text: '이미지가 너무 커요. 더 작은 사진을 보내주세요.' }));
+        }
+
+        const rooms = await db.all('SELECT * FROM rooms WHERE broadcaster_id = ?', [ws.userId]);
+        const now = Date.now();
+        const affectedUsers = new Set();
+
+        for (const room of rooms) {
+          const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, dataUrl, now, 'announce_image']);
+          const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, text: dataUrl, created_at: now, read: 0, kind: 'announce_image' } };
+          sendTo(room.fan_id, msg);
+          affectedUsers.add(room.fan_id);
+        }
+        for (const fanId of affectedUsers) await pushRoomList(fanId);
+        await pushRoomList(ws.userId);
+        ws.send(JSON.stringify({ type: 'announce_done', count: rooms.length }));
+      }
+
       // [통합 피드] 방송인 전용: 모든 팬 방의 메시지를 시간순으로 한 줄로 모아서 보내줌
       // 전체 발송(announce)은 방마다 복사돼 저장되므로, 같은 내용+시각은 하나로 합쳐요(중복 제거).
       else if (data.type === 'open_feed') {
@@ -267,7 +291,7 @@ wss.on('connection', (ws) => {
           JOIN rooms r ON r.id = m.room_id
           JOIN users u ON u.id = m.sender_id
           WHERE r.broadcaster_id = ?
-          GROUP BY CASE WHEN m.kind = 'announce' THEN 'a' || m.text || m.created_at ELSE 'm' || m.id END
+          GROUP BY CASE WHEN m.kind IN ('announce', 'announce_image') THEN 'a' || m.created_at ELSE 'm' || m.id END
           ORDER BY m.created_at DESC, m.id DESC
           LIMIT 100
         `, [ws.userId]);

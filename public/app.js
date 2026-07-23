@@ -168,6 +168,23 @@ $('feed-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendFeedAnnounce();
 });
 
+// 피드의 사진 버튼 = 사진 전체 발송 (모든 팬에게)
+$('feed-image-btn').addEventListener('click', () => $('feed-image-file').click());
+$('feed-image-file').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file || !ws || ws.readyState !== 1) return;
+  if (!file.type.startsWith('image/')) return alert('이미지 파일만 보낼 수 있어요.');
+  if (!confirm('이 사진을 모든 팬에게 발송할까요?')) return; // 사진 전체 발송은 되돌릴 수 없으니 한 번 확인
+  try {
+    const dataUrl = await compressImage(file, 1024, 0.7);
+    if (dataUrl.length > 2_000_000) return alert('사진이 너무 커요. 더 작은 사진을 보내주세요.');
+    ws.send(JSON.stringify({ type: 'announce_image', dataUrl }));
+  } catch {
+    alert('사진을 처리하지 못했어요.');
+  }
+});
+
 // ─────────── 서버 연결 (WebSocket) ───────────
 function connect() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -303,17 +320,27 @@ function appendFeedItem(m, scroll = true) {
   const mine = m.sender_id === me.id;
 
   if (mine) {
-    // 내(방송인) 메시지: 오른쪽 보라 말풍선 + "전체 발송" 꼬리표
+    // 내(방송인) 메시지: 오른쪽 보라 말풍선(또는 사진) + "전체 발송" 꼬리표
     const wrap = document.createElement('div');
     wrap.className = 'feed-mine';
     const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.style.background = '#5b4ddb';
-    bubble.style.color = '#fff';
-    bubble.textContent = m.text;
+    if (m.kind === 'image' || m.kind === 'announce_image') {
+      bubble.className = 'bubble image-bubble';
+      const img = document.createElement('img');
+      img.src = m.text;
+      img.alt = '사진';
+      img.addEventListener('click', () => openLightbox(m.text));
+      bubble.appendChild(img);
+    } else {
+      bubble.className = 'bubble';
+      bubble.style.background = '#5b4ddb';
+      bubble.style.color = '#fff';
+      bubble.textContent = m.text;
+    }
     const tag = document.createElement('div');
     tag.className = 'feed-tag';
-    tag.textContent = (m.kind === 'announce' ? '📢 전체 발송' : '개별 답장') + ' · ' + formatTime(m.created_at);
+    const isAnnounce = m.kind === 'announce' || m.kind === 'announce_image';
+    tag.textContent = (isAnnounce ? '📢 전체 발송' : '개별 답장') + ' · ' + formatTime(m.created_at);
     wrap.appendChild(bubble);
     wrap.appendChild(tag);
     view.appendChild(wrap);
@@ -386,8 +413,8 @@ function renderMessage(m) {
   line.className = 'bubble-line';
 
   const bubble = document.createElement('div');
-  if (m.kind === 'image') {
-    // 이미지 메시지: 말풍선 안에 사진을 넣고, 누르면 원본을 새 탭에서 열기
+  if (m.kind === 'image' || m.kind === 'announce_image') {
+    // 이미지 메시지(일반/전체발송): 말풍선 안에 사진을 넣고, 누르면 크게 보기
     bubble.className = 'bubble image-bubble';
     const img = document.createElement('img');
     img.src = m.text; // 압축된 dataURL

@@ -73,6 +73,8 @@
     <main id="room-list"></main>
     <p id="empty-hint" hidden>아직 채팅방이 없어요.<br />위 칸에 방송인 이름이나 초대 링크를 넣어 대화를 시작하세요.</p>
     <footer id="feed-bar" hidden>
+      <button id="feed-image-btn" title="사진 전체 발송" aria-label="사진 전체 발송">📷</button>
+      <input id="feed-image-file" type="file" accept="image/*" hidden />
       <input id="feed-input" type="text" placeholder="쓰면 팬 전원에게 발송돼요" maxlength="1000" autocomplete="off" />
       <button id="feed-send-btn" class="primary">전체 발송</button>
     </footer>

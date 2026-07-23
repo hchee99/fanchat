@@ -295,7 +295,7 @@ button.primary:hover { background: #4a3dc4; }
 .unread { color: #e94a4a; font-weight: bold; }
 
 #input-bar { display: flex; align-items: center; background: #fff; padding: 8px; gap: 6px; }
-#image-btn {
+#image-btn, #feed-image-btn {
   border: none;
   background: none;
   font-size: 22px;
