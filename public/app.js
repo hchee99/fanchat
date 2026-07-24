@@ -122,7 +122,21 @@ function openSettings() {
   applyAvatar($('settings-avatar'), me.avatar, me.nickname);
   $('settings-name').textContent = me.nickname + (me.isBroadcaster ? ' (방송인)' : '');
   $('open-welcome-btn').hidden = !me.isBroadcaster; // 입장 인사말은 방송인만
+  updateNotifButton();
   showScreen('settings');
+}
+
+// 재접속 시, 알림을 켜뒀던 사람은 구독을 서버에 다시 등록 (서버 DB가 바뀌어도 유지)
+async function resyncPush() {
+  if (localStorage.getItem('fanchat-notif') !== 'on') return;
+  if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub && ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'save_push_sub', subscription: sub.toJSON() }));
+    }
+  } catch { /* 무시 */ }
 }
 $('settings-btn').addEventListener('click', openSettings);
 $('my-name').addEventListener('click', openSettings);
@@ -159,6 +173,51 @@ $('open-blocklist-btn').addEventListener('click', () => {
   ws.send(JSON.stringify({ type: 'block_list' }));
 });
 $('blocklist-close-btn').addEventListener('click', () => { $('blocklist-view').hidden = true; });
+
+// ─────────── 푸시 알림 (앱 꺼도 오는 배너) ───────────
+// base64 공개키를 브라우저 구독에 필요한 형식(Uint8Array)으로 변환
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+async function enableNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return alert('이 브라우저는 푸시 알림을 지원하지 않아요.');
+  }
+  // 1. 서버에서 공개키 받기
+  const cfg = await (await fetch('/api/vapid')).json();
+  if (!cfg.enabled || !cfg.publicKey) {
+    return alert('아직 서버에 알림 설정(VAPID 키)이 안 돼 있어요.');
+  }
+  // 2. 알림 권한 요청
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    return alert('알림 권한이 꺼져 있어요. 브라우저 설정에서 허용해주세요.');
+  }
+  // 3. 서비스 워커 등록 + 푸시 구독
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(cfg.publicKey),
+  });
+  // 4. 구독 정보를 서버에 저장
+  ws.send(JSON.stringify({ type: 'save_push_sub', subscription: sub.toJSON() }));
+  localStorage.setItem('fanchat-notif', 'on');
+  updateNotifButton();
+  alert('알림을 켰어요! 앱을 꺼둬도 새 메시지가 오면 배너로 알려드려요.');
+}
+
+function updateNotifButton() {
+  const on = localStorage.getItem('fanchat-notif') === 'on' && Notification.permission === 'granted';
+  $('notif-btn').textContent = on ? '🔔 알림 켜짐' : '🔔 알림 켜기';
+}
+$('notif-btn').addEventListener('click', enableNotifications);
 
 // ─────────── 입장 인사말 설정 (방송인 전용) ───────────
 $('open-welcome-btn').addEventListener('click', () => {
@@ -312,6 +371,7 @@ function connect() {
       if (me.isBroadcaster && activeTab === 'feed') {
         ws.send(JSON.stringify({ type: 'open_feed' }));
       }
+      resyncPush(); // 알림 켜뒀으면 구독 재등록
     } else if (data.type === 'rooms') {
       renderRoomList(data.rooms);
     } else if (data.type === 'feed') {

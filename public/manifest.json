@@ -1,0 +1,13 @@
+{
+  "name": "fanchat",
+  "short_name": "fanchat",
+  "description": "방송인과 팬의 1:1 채팅",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f3f7",
+  "theme_color": "#5b4ddb",
+  "icons": [
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
+  ]
+}

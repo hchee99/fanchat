@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <!-- interactive-widget=resizes-content: 키보드가 뜨면 브라우저가 화면 높이를 알아서 줄여줌 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+  <!-- PWA(홈 화면에 추가) + 아이콘 -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#5b4ddb" />
+  <link rel="icon" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="fanchat" />
   <title>fanchat</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -101,6 +108,7 @@
       <button id="avatar-change-btn" class="primary">프로필 사진 바꾸기</button>
       <button id="avatar-remove-btn">기본 이미지로</button>
       <p id="settings-name" class="settings-name"></p>
+      <button id="notif-btn">🔔 알림 켜기</button>
       <button id="open-welcome-btn" hidden>입장 인사말 설정</button>
       <button id="open-blocklist-btn">차단 목록 관리</button>
     </main>

@@ -11,11 +11,28 @@ const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const webpush = require('web-push');
 const db = require('./db');
+
+// ── 웹 푸시(앱 꺼도 오는 알림) 준비 ──
+// VAPID = 서버가 "나 진짜 이 서비스야"를 증명하는 열쇠 한 쌍. Render 환경변수로 넣어요.
+const PUSH_ON = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+if (PUSH_ON) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@fanchat.app',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 클라이언트가 푸시 구독할 때 필요한 공개키를 알려줌 (비밀키는 서버만 가짐)
+app.get('/api/vapid', (req, res) => {
+  res.json({ enabled: PUSH_ON, publicKey: process.env.VAPID_PUBLIC_KEY || '' });
+});
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -170,6 +187,34 @@ async function pushRoomList(userId) {
   sendTo(userId, { type: 'rooms', rooms: await getRoomList(userId) });
 }
 
+// 지금 접속(WebSocket 연결) 중인지 — 아니면 "앱 꺼짐"으로 보고 푸시를 보냄
+function isOnline(userId) {
+  const set = online.get(userId);
+  return !!(set && set.size > 0);
+}
+
+// 웹 푸시 발송: 그 사람의 등록된 기기들로 알림 배너를 보냄.
+// 죽은 구독(410/404)은 정리해요. 실패해도 채팅엔 영향 없게 조용히 처리.
+async function sendPush(userId, payload) {
+  if (!PUSH_ON) return;
+  const subs = await db.all('SELECT id, sub_json FROM push_subs WHERE user_id = ?', [userId]);
+  for (const row of subs) {
+    try {
+      await webpush.sendNotification(JSON.parse(row.sub_json), JSON.stringify(payload));
+    } catch (err) {
+      if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+        await db.run('DELETE FROM push_subs WHERE id = ?', [row.id]); // 만료된 구독 제거
+      }
+    }
+  }
+}
+
+// 상대가 오프라인이면 푸시 알림 (제목=보낸 사람, 내용=미리보기)
+async function notifyIfOffline(userId, fromName, preview) {
+  if (isOnline(userId)) return;
+  await sendPush(userId, { title: fromName, body: preview, url: '/' });
+}
+
 // ─────────── 실시간 통신 (WebSocket) ───────────
 wss.on('connection', (ws) => {
   ws.on('message', async (raw) => {
@@ -243,6 +288,19 @@ wss.on('connection', (ws) => {
       // [차단 목록] 내가 차단한 사람들
       if (data.type === 'block_list') {
         ws.send(JSON.stringify({ type: 'block_list', list: await getBlockList(ws.userId) }));
+        return;
+      }
+
+      // [푸시 구독 저장] 이 사용자가 이 기기로 알림 받겠다고 등록
+      if (data.type === 'save_push_sub') {
+        const sub = data.subscription;
+        if (!sub || !sub.endpoint) return;
+        await db.run(
+          `INSERT INTO push_subs (user_id, endpoint, sub_json, created_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, sub_json = excluded.sub_json`,
+          [ws.userId, sub.endpoint, JSON.stringify(sub), Date.now()]
+        );
+        ws.send(JSON.stringify({ type: 'push_saved' }));
         return;
       }
 
@@ -345,6 +403,7 @@ wss.on('connection', (ws) => {
         sendTo(peerId, msg);
         await pushRoomList(ws.userId);
         await pushRoomList(peerId);
+        await notifyIfOffline(peerId, ws.nickname, text); // 상대가 앱 꺼뒀으면 푸시
       }
 
       // [이미지 전송] 클라이언트가 압축한 이미지(dataURL)를 받아 저장·전달
@@ -371,6 +430,7 @@ wss.on('connection', (ws) => {
         sendTo(peerId, msg);
         await pushRoomList(ws.userId);
         await pushRoomList(peerId);
+        await notifyIfOffline(peerId, ws.nickname, '[사진]'); // 상대가 앱 꺼뒀으면 푸시
       }
 
       // [공지 전체 발송] 방송인이 공지 1개를 쓰면 → 자기 팬들의 모든 방에 개별 발송
@@ -393,6 +453,7 @@ wss.on('connection', (ws) => {
           const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, text, now, 'announce']);
           const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, sender_avatar: ws.avatar, text, created_at: now, read: 0, kind: 'announce' } };
           sendTo(room.fan_id, msg); // 각 팬에게 전송
+          await notifyIfOffline(room.fan_id, ws.nickname, text); // 앱 끈 팬에겐 푸시
           affectedUsers.add(room.fan_id);
         }
         // 목록 화면(미리보기/시간)도 갱신
@@ -422,6 +483,7 @@ wss.on('connection', (ws) => {
           const r = await db.run('INSERT INTO messages (room_id, sender_id, text, created_at, kind) VALUES (?, ?, ?, ?, ?)', [room.id, ws.userId, dataUrl, now, 'announce_image']);
           const msg = { type: 'chat', roomId: room.id, message: { id: r.lastInsertRowid, sender_id: ws.userId, sender_name: ws.nickname, sender_avatar: ws.avatar, text: dataUrl, created_at: now, read: 0, kind: 'announce_image' } };
           sendTo(room.fan_id, msg);
+          await notifyIfOffline(room.fan_id, ws.nickname, '[사진]'); // 앱 끈 팬에겐 푸시
           affectedUsers.add(room.fan_id);
         }
         for (const fanId of affectedUsers) await pushRoomList(fanId);
