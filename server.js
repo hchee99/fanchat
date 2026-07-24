@@ -187,10 +187,19 @@ async function pushRoomList(userId) {
   sendTo(userId, { type: 'rooms', rooms: await getRoomList(userId) });
 }
 
-// 지금 접속(WebSocket 연결) 중인지 — 아니면 "앱 꺼짐"으로 보고 푸시를 보냄
+// 지금 접속(WebSocket 연결) 중인지
 function isOnline(userId) {
   const set = online.get(userId);
   return !!(set && set.size > 0);
+}
+
+// 지금 "앱을 화면에서 보고 있는지"(활성). 어느 기기든 하나라도 보고 있으면 true.
+// 앱을 닫거나 다른 앱으로 나가면 즉시 false가 되어(브라우저 visibility 신호) 바로 푸시가 나가요.
+function isActive(userId) {
+  const set = online.get(userId);
+  if (!set) return false;
+  for (const ws of set) if (ws.active) return true;
+  return false;
 }
 
 // 웹 푸시 발송: 그 사람의 등록된 기기들로 알림 배너를 보냄.
@@ -209,9 +218,9 @@ async function sendPush(userId, payload) {
   }
 }
 
-// 상대가 오프라인이면 푸시 알림 (제목=보낸 사람, 내용=미리보기)
+// 상대가 지금 앱을 안 보고 있으면(닫았거나 다른 앱) 즉시 푸시 알림 — 30초 기다릴 필요 없음
 async function notifyIfOffline(userId, fromName, preview) {
-  if (isOnline(userId)) return;
+  if (isActive(userId)) return; // 화면에 앱을 띄워 보고 있으면 굳이 배너 안 보냄
   await sendPush(userId, { title: fromName, body: preview, url: '/' });
 }
 
@@ -232,6 +241,7 @@ wss.on('close', () => clearInterval(heartbeatTimer));
 // ─────────── 실시간 통신 (WebSocket) ───────────
 wss.on('connection', (ws) => {
   ws.isAlive = true;
+  ws.active = true; // 접속 직후엔 보고 있다고 가정 (곧 클라이언트가 실제 상태를 알려줌)
   ws.on('pong', heartbeat); // 클라이언트가 핑에 응답하면 살아있음 표시
   ws.on('message', async (raw) => {
     let data;
@@ -257,6 +267,13 @@ wss.on('connection', (ws) => {
       }
 
       if (!ws.userId) return; // 인증 전에는 아무것도 못 함
+
+      // [화면 활성 상태] 앱을 보고 있으면 true, 닫거나 다른 앱으로 나가면 false.
+      // 이 신호로 "지금 안 보고 있음"을 즉시 알아 딜레이 없이 푸시를 보내요.
+      if (data.type === 'visibility') {
+        ws.active = !!data.active;
+        return;
+      }
 
       // [프로필 사진 설정] 압축된 사진(dataURL)을 내 프사로 저장
       if (data.type === 'set_avatar') {

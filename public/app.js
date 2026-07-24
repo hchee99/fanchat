@@ -393,6 +393,7 @@ function connect() {
         ws.send(JSON.stringify({ type: 'open_feed' }));
       }
       resyncPush(); // 알림 켜뒀으면 구독 재등록
+      sendVisibility(); // 접속 직후 현재 화면 상태 알려주기 (푸시 판단용)
     } else if (data.type === 'rooms') {
       renderRoomList(data.rooms);
     } else if (data.type === 'feed') {
@@ -929,6 +930,19 @@ setAppHeight();
 
 // 입력창을 탭해서 키보드가 뜰 때도 최근 메시지가 보이도록 (키보드 애니메이션 후 스크롤)
 $('msg-input').addEventListener('focus', () => setTimeout(scrollToBottom, 300));
+
+// ─────────── 화면 보임/숨김을 서버에 알리기 (푸시 즉시 판단용) ───────────
+function sendVisibility() {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'visibility', active: document.visibilityState === 'visible' }));
+  }
+}
+// 앱을 다른 탭/앱으로 전환하거나 돌아올 때
+document.addEventListener('visibilitychange', sendVisibility);
+// 앱(탭)을 완전히 닫을 때 — 즉시 "안 봄"을 알려 딜레이 없이 푸시가 나가게
+window.addEventListener('pagehide', () => {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'visibility', active: false }));
+});
 
 // ─────────── 시작: 저장된 로그인이 있으면 바로 입장 ───────────
 // 저장된 값이 손상돼 있어도 앱이 멈추지 않게 try로 감싸고, 실패하면 로그인 화면으로
