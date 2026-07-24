@@ -213,11 +213,32 @@ async function enableNotifications() {
   alert('알림을 켰어요! 앱을 꺼둬도 새 메시지가 오면 배너로 알려드려요.');
 }
 
-function updateNotifButton() {
-  const on = localStorage.getItem('fanchat-notif') === 'on' && Notification.permission === 'granted';
-  $('notif-btn').textContent = on ? '🔔 알림 켜짐' : '🔔 알림 켜기';
+// 알림 끄기: 구독을 취소하고 서버에서도 삭제
+async function disableNotifications() {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'remove_push_sub', endpoint: sub.endpoint }));
+      await sub.unsubscribe();
+    }
+  } catch { /* 무시 */ }
+  localStorage.setItem('fanchat-notif', 'off');
+  updateNotifButton();
+  alert('알림을 껐어요.');
 }
-$('notif-btn').addEventListener('click', enableNotifications);
+
+function isNotifOn() {
+  return localStorage.getItem('fanchat-notif') === 'on' && Notification.permission === 'granted';
+}
+function updateNotifButton() {
+  $('notif-btn').textContent = isNotifOn() ? '🔔 알림 끄기' : '🔔 알림 켜기';
+}
+// 버튼 = 토글 (켜져 있으면 끄고, 꺼져 있으면 켬)
+$('notif-btn').addEventListener('click', () => {
+  if (isNotifOn()) disableNotifications();
+  else enableNotifications();
+});
 
 // ─────────── 입장 인사말 설정 (방송인 전용) ───────────
 $('open-welcome-btn').addEventListener('click', () => {

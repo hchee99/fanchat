@@ -304,6 +304,14 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      // [푸시 구독 해제] 이 기기로 알림 안 받겠다
+      if (data.type === 'remove_push_sub') {
+        const endpoint = String(data.endpoint || '');
+        if (endpoint) await db.run('DELETE FROM push_subs WHERE endpoint = ? AND user_id = ?', [endpoint, ws.userId]);
+        ws.send(JSON.stringify({ type: 'push_removed' }));
+        return;
+      }
+
       // [입장 인사말 불러오기] 방송인이 편집 화면 열 때
       if (data.type === 'get_welcome') {
         if (!ws.isBroadcaster) return;
