@@ -215,8 +215,24 @@ async function notifyIfOffline(userId, fromName, preview) {
   await sendPush(userId, { title: fromName, body: preview, url: '/' });
 }
 
+// ── 하트비트(핑퐁) ──
+// 앱을 닫아도 연결이 바로 안 끊길 때가 있어서, 서버가 주기적으로 핑을 보내
+// 응답(퐁) 없는 연결은 끊긴 걸로 처리해요. 그래야 "오프라인"을 제대로 알아
+// 푸시 알림이 나갑니다. (이게 알림이 안 오던 핵심 원인)
+function heartbeat() { this.isAlive = true; }
+const heartbeatTimer = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate(); // 지난번 핑에 응답 없었음 → 끊기
+    ws.isAlive = false;
+    try { ws.ping(); } catch { /* 무시 */ }
+  });
+}, 30000);
+wss.on('close', () => clearInterval(heartbeatTimer));
+
 // ─────────── 실시간 통신 (WebSocket) ───────────
 wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', heartbeat); // 클라이언트가 핑에 응답하면 살아있음 표시
   ws.on('message', async (raw) => {
     let data;
     try { data = JSON.parse(raw); } catch { return; }
