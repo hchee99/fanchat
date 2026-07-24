@@ -653,9 +653,95 @@ function renderPhotos(photos) {
   }
 }
 
+// ─────────── 대화 검색 (카톡 돋보기) ───────────
+let searchMarks = [];   // 현재 검색으로 찾은 <mark>들 (오래된→최신 순)
+let searchIdx = -1;
+
+function clearSearchHighlights() {
+  document.querySelectorAll('#messages .bubble[data-plain]').forEach((b) => {
+    if (b.querySelector('mark')) b.textContent = b.dataset.plain; // 마크 제거, 원문 복원
+  });
+  document.querySelectorAll('.msg-row.search-current').forEach((r) => r.classList.remove('search-current'));
+  searchMarks = [];
+  searchIdx = -1;
+}
+
+function runSearch(q) {
+  clearSearchHighlights();
+  q = q.trim();
+  if (!q) { $('search-count').textContent = ''; updateSearchNav(); return; }
+  const ql = q.toLowerCase();
+  document.querySelectorAll('#messages .bubble[data-plain]').forEach((bubble) => {
+    const text = bubble.dataset.plain;
+    if (!text.toLowerCase().includes(ql)) return;
+    bubble.textContent = '';
+    let i = 0, idx;
+    const lower = text.toLowerCase();
+    while ((idx = lower.indexOf(ql, i)) !== -1) {
+      if (idx > i) bubble.appendChild(document.createTextNode(text.slice(i, idx)));
+      const mk = document.createElement('mark');
+      mk.className = 'hit';
+      mk.textContent = text.slice(idx, idx + q.length);
+      bubble.appendChild(mk);
+      searchMarks.push(mk);
+      i = idx + q.length;
+    }
+    if (i < text.length) bubble.appendChild(document.createTextNode(text.slice(i)));
+  });
+  if (searchMarks.length === 0) {
+    $('search-count').textContent = '0';
+  } else {
+    gotoMatch(searchMarks.length - 1); // 가장 최근(아래쪽) 일치부터 보여줌
+  }
+  updateSearchNav();
+}
+
+function gotoMatch(i) {
+  if (i < 0 || i >= searchMarks.length) return;
+  // 이전 current 표시 제거
+  searchMarks.forEach((m) => m.classList.remove('current'));
+  document.querySelectorAll('.msg-row.search-current').forEach((r) => r.classList.remove('search-current'));
+  searchIdx = i;
+  const mk = searchMarks[i];
+  mk.classList.add('current');
+  const row = mk.closest('.msg-row');
+  if (row) row.classList.add('search-current');
+  mk.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  $('search-count').textContent = `${i + 1}/${searchMarks.length}`;
+  updateSearchNav();
+}
+
+function updateSearchNav() {
+  $('search-prev').disabled = !(searchIdx > 0);                        // ▲ 더 오래된 것
+  $('search-next').disabled = !(searchIdx >= 0 && searchIdx < searchMarks.length - 1); // ▼ 더 최근 것
+}
+
+function openSearch() {
+  $('room-menu').hidden = true;
+  $('search-bar').hidden = false;
+  $('search-input').value = '';
+  $('search-count').textContent = '';
+  $('search-input').focus();
+  updateSearchNav();
+}
+function closeSearch() {
+  $('search-bar').hidden = true;
+  clearSearchHighlights();
+  $('search-count').textContent = '';
+}
+$('menu-search-btn').addEventListener('click', openSearch);
+$('search-close').addEventListener('click', closeSearch);
+$('search-input').addEventListener('input', (e) => runSearch(e.target.value));
+$('search-prev').addEventListener('click', () => gotoMatch(searchIdx - 1));
+$('search-next').addEventListener('click', () => gotoMatch(searchIdx + 1));
+$('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') gotoMatch(searchIdx > 0 ? searchIdx - 1 : searchMarks.length - 1); // 엔터 = 다음(위로)
+});
+
 $('back-btn').addEventListener('click', () => {
   currentRoomId = null;
   $('photos-view').hidden = true; // 방 나갈 때 모아보기도 닫기
+  closeSearch();                  // 검색도 닫기
   showScreen('list');
   // 방송인이 피드 탭이었다면 방에 다녀온 사이의 변화를 반영해 새로 받아옴
   if (me.isBroadcaster && activeTab === 'feed' && ws && ws.readyState === 1) {
@@ -664,6 +750,8 @@ $('back-btn').addEventListener('click', () => {
 });
 
 function renderHistory(data) {
+  $('search-bar').hidden = true; // 방 열 때 검색바 초기화
+  searchMarks = []; searchIdx = -1;
   currentPeer = { name: data.peer, avatar: data.peerAvatar || null };
   $('peer-name').textContent = data.peer;
   applyAvatar($('peer-avatar'), currentPeer.avatar, data.peer); // 헤더에 상대 프사
@@ -695,6 +783,7 @@ function renderMessage(m) {
   } else {
     bubble.className = 'bubble';
     bubble.textContent = m.text; // textContent라서 남이 보낸 HTML은 실행되지 않아 안전
+    bubble.dataset.plain = m.text; // 검색 하이라이트 후 원문 복원용
   }
 
   const meta = document.createElement('div');

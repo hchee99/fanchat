@@ -149,8 +149,17 @@
     </header>
     <!-- 채팅방 메뉴 (⋮ 누르면 뜸) -->
     <div id="room-menu" hidden>
+      <button id="menu-search-btn">대화 검색</button>
       <button id="menu-photos-btn">사진 모아보기</button>
       <button id="menu-block-btn">차단하기</button>
+    </div>
+    <!-- 대화 검색바 -->
+    <div id="search-bar" hidden>
+      <input id="search-input" type="text" placeholder="대화 내용 검색" autocomplete="off" />
+      <span id="search-count"></span>
+      <button id="search-prev" aria-label="이전">▲</button>
+      <button id="search-next" aria-label="다음">▼</button>
+      <button id="search-close" aria-label="닫기">✕</button>
     </div>
     <main id="messages"></main>
     <footer id="input-bar">

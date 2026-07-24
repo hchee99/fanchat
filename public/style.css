@@ -354,6 +354,38 @@ button.primary:hover { background: #4a3dc4; }
 #room-menu button:hover { background: #f5f5fb; }
 #menu-block-btn { color: #e94a4a; border-top: 1px solid #f0f0f0; }
 
+/* 대화 검색바 */
+#search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #eef0fb;
+  border-bottom: 1px solid #ddd;
+}
+#search-input {
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  outline: none;
+}
+#search-input:focus { border-color: #5b4ddb; }
+#search-count { font-size: 12px; color: #666; min-width: 34px; text-align: center; }
+#search-bar button {
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: #5b4ddb;
+  padding: 4px 6px;
+}
+#search-bar button:disabled { color: #bbb; }
+/* 검색 하이라이트 */
+mark.hit { background: #ffe08a; color: inherit; border-radius: 2px; }
+mark.hit.current { background: #ffb300; }
+.msg-row.search-current .bubble { box-shadow: 0 0 0 2px #ffb300; }
+
 /* 차단 목록 오버레이 (사진 모아보기와 동일 스타일 재사용) */
 #blocklist-view {
   position: fixed; inset: 0; max-width: 480px; margin: 0 auto;
